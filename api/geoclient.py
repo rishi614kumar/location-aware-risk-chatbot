@@ -1,6 +1,6 @@
 import requests
 
-API_KEY = "c1ca0e92672945859bb10a4db0a294a2"
+#API_KEY = ####
 BASE_URL = "https://api.nyc.gov/geoclient/v2"
 
 params = {
