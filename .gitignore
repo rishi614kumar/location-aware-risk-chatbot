@@ -1,0 +1,5 @@
+.env
+*.gdb
+*.gpkg
+/data/raw/
+/__pycache__/
