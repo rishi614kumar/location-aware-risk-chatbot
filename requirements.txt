@@ -2,3 +2,4 @@ chainlit
 geopandas
 fiona
 pandas
+pyproj
