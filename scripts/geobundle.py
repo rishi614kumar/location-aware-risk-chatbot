@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any, List
 # Reuse your existing modules/utilities
 from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_bbl
 from adapters.precinct import get_precinct_from_bbl
+from adapters.schemas import GeoBundle, SourceMeta
+
 
 _gc = Geoclient()
 
@@ -12,7 +14,8 @@ def _standardize_bundle(base: Dict[str, Any]) -> Dict[str, Any]:
     Normalize keys and leave room for future fields.
     Everything optional and easy to extend.
     """
-    return {
+    base = base or {}
+    bundle = {
         # echo input
         "input": base.get("input"),             # e.g., {"type":"address", "address":"...", "borough":"..."} or {"type":"bbl","bbl":"..."}
         # primary ids
@@ -32,6 +35,7 @@ def _standardize_bundle(base: Dict[str, Any]) -> Dict[str, Any]:
         # placeholder for easy future extension
         "extras": base.get("extras", {}),       # e.g., zoning, council, flood, etc.
     }
+    return GeoBundle(**bundle)
 
 def geo_from_address(address: str, borough: str) -> Dict[str, Any]:
     """
@@ -68,7 +72,7 @@ def geo_from_bbl(bbl: str) -> Dict[str, Any]:
     Augment with Geoclient fields if available (borough/nta may be present).
     """
     # PLUTO for precinct
-    precinct = get_precinct_for_bbl(bbl)
+    precinct = get_precinct_from_bbl(bbl)
 
     # Geoclient to enrich (NTA, maybe borough; precinct here is from PLUTO by design)
     info = _gc.bbl(bbl)
