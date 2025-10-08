@@ -9,7 +9,7 @@ from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Ri
 from adapters.nta import get_nta_from_bbl  # Sharon
 from adapters.lion import get_bbls_from_lion_span  # Kevin
 from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # Max
-from adapters.coords import get_bbl_from_lonlat  # Louis
+from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
 # Initialize the client
 gc = Geoclient()
 
@@ -105,10 +105,23 @@ print(f"Round-trip error: d_lat={d_lat:.8f}, d_lon={d_lon:.8f}")
 
 # ---------------- Louis: Coordinates Demo ----------------
 print("\n---------------- Example 12: Coordinate <-> BBL ----------------")
-print("(TODO: Louis) Example: Get BBL from coordinates or vice versa")
-# Example expected usage:
-# bbl2 = bbl_from_lonlat(40.7539, -73.9755)
-# print("BBL from coords:", bbl2)
+lon, lat = -73.9755, 40.7539
+print("Coordinate:", (lon, lat))
+# BBL from single coordinate
+result = get_bbl_from_lonlat(lon, lat)
+print("Nearest BBL and distance (ft):", result)
+
+# Nearby BBLs within 50 ft
+nearby = get_bbls_near_lonlat(lon, lat, buffer_ft=50)
+print("Nearby BBLs (within 50 ft):", nearby)
+
+# Get coordinate back from a sample BBL
+if result:
+    bbl = result[0]
+    coords = get_lonlat_from_bbl(bbl)
+    print(f"Representative coordinate for BBL {bbl}:", coords)
+else:
+    print("No nearby BBL found.")
 
 print("\n------------------------Example 13: Get all BBLs for a given Precinct (PLUTO)------------------------")
 precinct=18
