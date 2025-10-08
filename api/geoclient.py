@@ -75,7 +75,6 @@ def _extract_bins(section: Dict[str, Any]) -> list[str]:
     return sorted(b for b in bins if b and b.isdigit())
 
 
-# --- public helpers your teammates can call -----------------------------------
 def get_bin_from_address(address: str, borough: str) -> Optional[str]:
     """
     Returns a single 'primary' BIN for the address (if present).

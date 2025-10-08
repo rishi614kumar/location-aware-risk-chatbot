@@ -1,9 +1,6 @@
 """
 Demo script for using Geoclient API helper functions.
 Run with:  python -m app_demo
-
-this shows:
-1. how to get BBL, BIN, NTA, Precinct, Coord info from an address
 """
 
 from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
