@@ -7,7 +7,7 @@ from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address
 from scripts.geobundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
 from adapters.nta import get_nta_from_bbl  # Sharon
-from adapters.lion import get_bbls_from_lion_span  # Kevin
+from adapters.street_span import get_bbls_from_lion_span, get_lion_span_from_bbl  # Kevin
 from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # Max
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
 # Initialize the client
@@ -79,15 +79,18 @@ print("(TODO: Sharon) Example: NTA for BBL", bbl)
 
 # ---------------- Kevin: LION Demo ----------------
 print("\n---------------- Example 10: LION Street Segment Lookups ----------------")
-print("(TODO: Kevin) Example: Find all BBLs for a LION street span")
-# Example expected usage:
-# lion_id = "LION1234"
-# bbls = get_bbls_from_lion_segment(lion_id)
-# print("BBLs for segment:", bbls)
+
+# Example 1: From street -> BBLs
+bbls = get_bbls_from_lion_span("EAST 168 STREET")
+print(f"Found {len(bbls)} BBLs\n")
+
+# Example 2: From BBL -> Street(s)
+lion_bbl = "2023720020"
+street = get_lion_span_from_bbl(bbl="2023720020")
+print(f"BBL {lion_bbl} corresponds to: {street}")
 
 # ---------------- Max: EPSG Demo ----------------
 print("\n---------------- Example 11: EPSG / Coordinate Conversion ----------------")
-print("(TODO: Max) Example: Convert WGS84 lat/lon to State Plane coordinates")
 lat, lon = 40.7539, -73.9755
 
 # Convert WGS84 (lon, lat) -> NY State Plane (EPSG:2263, feet)

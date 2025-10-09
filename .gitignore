@@ -3,3 +3,8 @@
 *.gpkg
 /data/raw/
 /__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
