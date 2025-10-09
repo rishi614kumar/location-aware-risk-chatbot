@@ -50,9 +50,10 @@ bin_primary = get_bin_from_address("237 Park Ave", "Manhattan")
 print("Primary BIN:", bin_primary)
 
 # Address -> all BINs 
-print("\n------------------------Example 5: Address to all BINs------------------------")
-bins = get_bins_from_address("237 Park Ave", "Manhattan")
-print("All BINs:", bins)
+print("\n------------------------Example 5: Address to all BINs (via BBL)------------------------")
+bbl_for_address = get_bbl_from_address("237 Park Ave", "Manhattan")
+bins = get_bins_from_bbl(bbl_for_address) if bbl_for_address else []
+print("All BINs (via BBL):", bins)
 
 # BBL -> all BINs on that lot
 print("\n------------------------Example 6: BBL to all BINS------------------------")
