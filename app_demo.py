@@ -6,7 +6,7 @@ Run with:  python -m app_demo
 from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
 from scripts.geobundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
-from adapters.nta import get_nta_from_bbl  # Sharon
+from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon
 from adapters.street_span import get_bbls_from_lion_span, get_lion_span_from_bbl  # Kevin
 from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # Max
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
@@ -73,10 +73,16 @@ print("Precinct:", bundle.precinct)
 
  # ---------------- Sharon: NTA Demo ----------------
 print("\n---------------- Example 9: NTA Lookups ----------------")
-print("(TODO: Sharon) Example: NTA for BBL", bbl)
-# Example expected usage:
-# nta = get_nta_from_bbl(bbl)
-# print("NTA:", nta)
+print("Example: NTA for BBL", bbl)
+nta_code = get_nta_from_bbl(bbl)
+print("NTA code for BBL:", nta_code)
+if nta_code:
+    bbls_in_nta = get_bbls_from_nta(nta_code)
+    print(f"BBLs in NTA {nta_code}:", len(bbls_in_nta))
+    print(f"First 10 BBLs in NTA {nta_code}:", bbls_in_nta[:10])  # preview first 10
+else:
+    print("No NTA found for this BBL.")
+
 
 # ---------------- Kevin: LION Demo ----------------
 print("\n---------------- Example 10: LION Street Segment Lookups ----------------")
@@ -127,12 +133,17 @@ if result:
 else:
     print("No nearby BBL found.")
 
-print("\n------------------------Example 13: Get all BBLs for a given Precinct (PLUTO)------------------------")
+print("\n------------------------Example 13: BBL <-> Precinct ------------------------")
 precinct=18
 bbls = get_bbls_from_precinct(precinct)
 print(f"Precinct {precinct} -> {len(bbls)} BBLs")
 preview = bbls[:20]
 print("First 20 BBLs:", preview)
+
+# Showcase: Get precinct from a sample BBL
+sample_bbl = "1013007501"
+precinct_for_bbl = get_precinct_from_bbl(sample_bbl)
+print(f"Precinct for BBL {sample_bbl}:", precinct_for_bbl)
 
 """
 NOTES:
