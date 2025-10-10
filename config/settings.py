@@ -6,6 +6,7 @@ load_dotenv()
 GEOCLIENT_API_KEY= os.getenv("GEOCLIENT_API_KEY")
 MAPPLUTO_GDB_PATH = os.getenv("MAPPLUTO_GDB_PATH")
 LION_GDB_PATH = os.getenv("LION_GDB_PATH")
+NTA_PATH = os.getenv("NTA_PATH")
 
 def check_env():
     missing = [k for k, v in globals().items() if k.isupper() and v is None]
