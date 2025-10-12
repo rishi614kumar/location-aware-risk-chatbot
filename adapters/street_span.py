@@ -4,6 +4,8 @@ import numpy as np
 from typing import List, Optional, Union
 from data.pluto import load_pluto_geom
 from data.lion import load_lion_geom
+from config.settings import (
+    MAX_BUFFER_FT, MIN_BUFFER_FT, DEFAULT_BUFFER_INCREMENT_FT, DEFAULT_BUFFER_FT)
 
 
 def get_bbls_from_lion_span(
@@ -13,7 +15,7 @@ def get_bbls_from_lion_span(
     """
     Given a street name, return all BBLs (tax lots) that intersect it.
     Optionally allows a custom buffer distance (in feet).
-    If buffer_ft is None, uses StreetWidth_Max + 10 ft as default.
+    If buffer_ft is None, uses StreetWidth_Max + DEFAULT_BUFFER_INCREMENT_FT as default.
     """
     pluto = load_pluto_geom()
     lion = load_lion_geom()
@@ -29,11 +31,11 @@ def get_bbls_from_lion_span(
     # Create per-segment buffer
     subset = subset.copy()
     if buffer_ft is None:
-        # Default: StreetWidth_Max + 10 ft
+        # Default: StreetWidth_Max + DEFAULT_BUFFER_INCREMENT_FT ft
         subset["buf_ft"] = np.where(
-            subset["_width_ft"].isna(), 30, subset["_width_ft"] + 10
+            subset["_width_ft"].isna(), DEFAULT_BUFFER_FT, subset["_width_ft"] + DEFAULT_BUFFER_INCREMENT_FT
         )
-        subset["buf_ft"] = np.clip(subset["buf_ft"], 10, 120)
+        subset["buf_ft"] = np.clip(subset["buf_ft"], MIN_BUFFER_FT, MAX_BUFFER_FT)
     else:
         # Custom buffer
         subset["buf_ft"] = buffer_ft
@@ -55,7 +57,7 @@ def get_lion_span_from_bbl(
     """
     Given a single BBL, return the street(s) it lies on.
     Optionally allows a custom buffer distance (in feet).
-    If buffer_ft is None, uses StreetWidth_Max + 10 ft as default.
+    If buffer_ft is None, uses StreetWidth_Max + DEFAULT_BUFFER_INCREMENT_FT ft as default.
     """
     lion = load_lion_geom()
     pluto = load_pluto_geom()
@@ -75,9 +77,9 @@ def get_lion_span_from_bbl(
     if buffer_ft is None:
         # Default buffer logic
         lion_buf["buf_ft"] = np.where(
-            lion_buf["_width_ft"].isna(), 30, lion_buf["_width_ft"] + 10
+            lion_buf["_width_ft"].isna(), DEFAULT_BUFFER_FT, lion_buf["_width_ft"] + DEFAULT_BUFFER_INCREMENT_FT
         )
-        lion_buf["buf_ft"] = np.clip(lion_buf["buf_ft"], 10, 120)
+        lion_buf["buf_ft"] = np.clip(lion_buf["buf_ft"], MIN_BUFFER_FT, MAX_BUFFER_FT)
     else:
         # Custom buffer
         lion_buf["buf_ft"] = buffer_ft
