@@ -4,3 +4,4 @@ fiona
 pandas
 pyproj
 pytest
+ollama
