@@ -19,7 +19,7 @@ from llm.DataHandler import cat_to_ds
 # -----------------------------
 # 0) CONFIG & STATIC MAPPINGS
 # -----------------------------
-load_dotenv()
+load_dotenv()  # ensure GEMINI_KEY / provider overrides are available to downstream clients
 
 BOROUGHS: Tuple[str, ...] = ("Queens", "Manhattan", "Bronx", "Staten Island", "Brooklyn")
 
@@ -35,7 +35,7 @@ _BOROUGH_ALIASES: Dict[str, str] = {
     "si": "Staten Island",
 }
 
-MAIN_CATS: List[str] = list(cat_to_ds.keys())
+MAIN_CATS: List[str] = list(cat_to_ds.keys())  # used for quick membership validation
 
 
 class ChatModel(Protocol):
@@ -262,6 +262,7 @@ def _regex_place_fallback(query: str) -> List[str]:
         if 1 <= len(toks) <= 4 and any(k in span.lower() for k in _POI_HINT_WORDS):
             cands.append(span.strip())
     return _normalize_dedupe(cands)
+# End of heuristics: if the LLM misbehaves, this keeps address extraction resilient.
 
 
 def _safe_parse_addr_json(s: str) -> List[str]:
@@ -344,7 +345,7 @@ class LLMParser:
             )
             data = json.loads(raw)
         except Exception:
-            return (["Other"], 0.5, self._infer_borough_from_query(query))
+            return (["Other"], 0.5, self._infer_borough_from_query(query))  # fall back gracefully when the LLM fails
 
         raw_cats = data.get("categories")
         if not raw_cats:
@@ -375,7 +376,7 @@ class LLMParser:
                 if out:
                     return out
             except Exception:
-                continue
+                continue  # keep trying with the next temperature or drop to regex fallback
         return _regex_place_fallback(query)
 
     def route_query_to_datasets(self, query: str) -> Dict[str, object]:
@@ -384,6 +385,7 @@ class LLMParser:
         """
         cats_raw, conf, borough = self.classify_query(query)
         cats = sorted(set(cats_raw))
+        # Gather every dataset referenced by the predicted categories (sorted for deterministic output).
         dataset_names = sorted({d for c in cats for d in self._cat_to_ds.get(c, [])})
         addr_list = self.extract_addresses(query)
         return {
@@ -422,41 +424,3 @@ def route_query_to_datasets_multi(
     """
     active_parser = parser or get_default_parser()
     return active_parser.route_query_to_datasets(query)
-
-
-if __name__ == '__main__':
-
-    print("------------------Example 1: Environmental & Health Risks------------------")
-    example_query = "Are there asbestos filings or air quality complaints near 45-10 21st Street in Queens?"
-    parser = get_default_parser()
-    result = parser.route_query_to_datasets(example_query)
-    print("\nQuery:", example_query)
-    print("Router Result:", json.dumps(result, indent=2))
-
-    handler = DataHandler(result["dataset_names"])
-    first_dataset = getattr(handler, "d1", None)
-    if first_dataset:
-        print("\nFirst Dataset:", first_dataset.name)
-        print("Description:", first_dataset.description)
-
-    second_dataset = getattr(handler, 'd2', None)
-    if second_dataset:
-        print("\nSecond Dataset:", second_dataset.name)
-        print("Description:", second_dataset.description)
-
-    print("\n------------------Example 2: Comparative Site Queries------------------")
-    example_query = 'Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?”'
-    result = parser.route_query_to_datasets(example_query)
-    print("\nQuery:", example_query)
-    print("Router Result:", json.dumps(result, indent=2))
-
-    handler = DataHandler(result["dataset_names"])
-    first_dataset = getattr(handler, "d1", None)
-    if first_dataset:
-        print("\nFirst Dataset:", first_dataset.name)
-        print("Description:", first_dataset.description)
-
-    second_dataset = getattr(handler, 'd2', None)
-    if second_dataset:
-        print("\nSecond Dataset:", second_dataset.name)
-        print("Description:", second_dataset.description)

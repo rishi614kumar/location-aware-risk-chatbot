@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+# Human-readable context for each dataset; extend as new sources come online.
 DATASET_DESCRIPTIONS: Dict[str, str] = {
     "Asbestos Control Program": (
         "ACP7 form is an asbestos project notification. Any time asbestos abatement is perform on "
@@ -21,16 +22,19 @@ DATASET_DESCRIPTIONS: Dict[str, str] = {
     )
 }
 
+# Lightweight topical tags that downstream UIs can group/filter on.
 DATASET_TAGS: Dict[str, List[str]] = {
     "Asbestos Control Program": ["asbestos", "environmental", "health"],
 }
 
+# Capabilities advertised by the dataset fetch layer.
 DEFAULT_DATASET_FLAGS: Dict[str, bool] = dict(
     supports_point_radius=True,
     supports_intersections=True,
     supports_addresses=True,
 )
 
+# Canonical mapping from risk categories to the datasets that provide answers.
 cat_to_ds: Dict[str, List[str]] = {
     "Environmental & Health Risks": [
         "Asbestos Control Program",
@@ -105,6 +109,7 @@ class DataSet:
 
     @property
     def desc(self) -> str:
+        # Short alias used by legacy code paths (e.g., handler.d1.desc)
         return self.description
 
     def to_dict(self) -> Dict[str, Any]:
@@ -120,6 +125,7 @@ class DataSet:
         }
 
 def _build_dataset(name: str) -> DataSet:
+    """Create a DataSet object from metadata tables, preserving flags & tags."""
     categories = sorted(set(_DATASET_TO_CATEGORIES.get(name, [])))
     description = DATASET_DESCRIPTIONS.get(name, "")
     tags = DATASET_TAGS.get(name, [])
@@ -139,6 +145,7 @@ class DataHandler:
     """
 
     def __init__(self, dataset_names: Iterable[str]) -> None:
+        # Deduplicate while preserving order so attribute naming stays stable.
         unique_names: List[str] = []
         seen = set()
         for name in dataset_names:
@@ -153,6 +160,7 @@ class DataHandler:
             setattr(self, f"d{idx}", dataset)
 
     def __iter__(self):
+        # Support simple loops like `for ds in handler`
         return iter(self._datasets)
 
     def __len__(self) -> int:
@@ -182,6 +190,7 @@ class DataHandler:
 # -----------------------------
 
 def describe_datasets(dataset_names: Iterable[str], *, as_dict: bool = True) -> List[Any]:
+    """Utility helper for callers that only need ad-hoc dataset descriptions."""
     datasets = [_build_dataset(name) for name in dataset_names if name]
     if as_dict:
         return [ds.to_dict() for ds in datasets]
