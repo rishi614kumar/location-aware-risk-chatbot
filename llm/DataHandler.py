@@ -122,6 +122,7 @@ class DataSet:
     supports_point_radius: bool = True
     supports_intersections: bool = True
     supports_addresses: bool = True
+    _df_cache: Optional[Union[pd.DataFrame, gpd.GeoDataFrame]] = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def desc(self) -> str:
@@ -152,12 +153,15 @@ class DataSet:
 
     @property
     def df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
-        """Return a fresh DataFrame for callers expecting property-style access."""
-        return self.fetch_data_frame()
+        """Return a cached DataFrame, fetching it if necessary."""
+        if self._df_cache is None:
+            object.__setattr__(self, "_df_cache", self.fetch_data_frame())
+        cached = self._df_cache
+        return cached.copy() if hasattr(cached, "copy") else cached
 
     def get_df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
         """Backwards-compatible method alias to retrieve the dataset."""
-        return self.fetch_data_frame()
+        return self.df
 
 def _build_dataset(name: str) -> DataSet:
     """Create a DataSet object from metadata tables, preserving flags & tags."""

@@ -9,10 +9,8 @@ import json
 import os
 import re
 from typing import Any, Dict, List, Optional, Protocol, Tuple
-from llm.DataHandler import DataHandler
 from dotenv import load_dotenv
-
-from llm.LLM_interface import ChatBackend, make_backend
+from llm.LLM_interface import ChatBackend, Chat, make_backend
 from llm.DataHandler import cat_to_ds
 
 
@@ -78,11 +76,12 @@ class BackendChatModel:
         self._model_name = model_name
         self._backend_kwargs = dict(backend_kwargs or {})
 
-        # Backwards compat: allow GEMINI_KEY alongside GEMINI_API_KEY.
-        if "api_key" not in self._backend_kwargs:
-            gemini_key = os.getenv("GEMINI_KEY")
-            if gemini_key:
-                self._backend_kwargs["api_key"] = gemini_key
+        self._api_key = (
+            self._backend_kwargs.get("api_key")
+            or os.getenv("GEMINI_API_KEY")
+        )
+        if self._api_key and "api_key" not in self._backend_kwargs:
+            self._backend_kwargs["api_key"] = self._api_key
 
     def request(
         self,
@@ -93,10 +92,11 @@ class BackendChatModel:
         response_format: str = "json",
     ) -> str:
         if self._prebuilt_backend is not None:
-            backend = self._prebuilt_backend
-            backend.reset()
-            backend.start(system_instruction=system_prompt)
-            return backend.send(user_prompt)
+            chat = Chat(self._prebuilt_backend)
+            chat.start(system_instruction=system_prompt)
+            response = chat.ask(user_prompt)
+            chat.reset()
+            return response
 
         kwargs: Dict[str, Any] = dict(self._backend_kwargs)
         generation_config = dict(kwargs.get("generation_config", {}) or {})
@@ -112,8 +112,11 @@ class BackendChatModel:
             model_name=self._model_name,
             **kwargs,
         )
-        backend.start(system_instruction=system_prompt)
-        return backend.send(user_prompt)
+        chat = Chat(backend)
+        chat.start(system_instruction=system_prompt)
+        response = chat.ask(user_prompt)
+        chat.reset()
+        return response
 
 
 # -----------------------------
@@ -129,7 +132,7 @@ SYS_MULTI = f"""Classify the user's question into one or more of these categorie
 - Comparative Site Queries
 
 Return STRICT JSON only:
-{{"categories": ["<labels>"], "datasets": ["<dataset names>"], "confidence": <0..1>, "borough": "<borough names>"}}
+{{"categories": ["<labels>"], "datasets": ["<dataset names>"], "confidence": <0..1>}}
 
 Rules:
 - Traffic, collisions, congestion, road closures, counts, speeds, hotspots -> Transportation & Traffic
@@ -138,8 +141,6 @@ Rules:
 - Flood/air/health exposure, sewer systems, population health -> Environmental & Health Risks
 - Crime, safety, hydrants, social context -> Public Safety & Social Context
 - Comparing between two sites (more/less, better/worse, higher/lower) -> include Comparative Site Queries plus other relevant labels
-- Borough names must be one of: Queens, Manhattan, Bronx, Staten Island, Brooklyn. If the user mentions a borough, preserve it. 
-    Otherwise, pick the best borough based on the query or if it is a comparative query, then include 2 or more depending on the query.
 - "datasets" should list the most relevant NYC datasets (typically 2-5) chosen from: {", ".join(ALL_DATASETS)}.
 - Prefer datasets whose categories overlap the predicted categories; only add others when clearly justified by the question.
 """.strip()
@@ -520,7 +521,6 @@ class LLMParser:
         return {
             "categories": cats,
             "confidence": round(conf, 3),
-            "borough": borough,
             "address": addr_list,
             "dataset_names": dataset_names,
         }
@@ -532,10 +532,28 @@ class LLMParser:
 _DEFAULT_PARSER: Optional[LLMParser] = None
 
 
-def get_default_parser() -> LLMParser:
+def get_default_parser(
+    *,
+    backend: Optional[ChatBackend] = None,
+    provider: Optional[str] = None,
+    model_name: Optional[str] = None,
+    backend_kwargs: Optional[Dict[str, Any]] = None,
+) -> LLMParser:
     """
-    Lazily build and reuse a parser backed by the project LLM backend.
+    Build a parser backed by the shared LLM backend.
+
+    If no parameters are provided, returns a cached default instance. Supplying
+    a backend or provider/model overrides the cache and constructs a new parser.
     """
+    if backend or provider or model_name or backend_kwargs:
+        model_client = BackendChatModel(
+            backend=backend,
+            provider=provider,
+            model_name=model_name,
+            backend_kwargs=backend_kwargs,
+        )
+        return LLMParser(model_client)
+
     global _DEFAULT_PARSER
     if _DEFAULT_PARSER is None:
         _DEFAULT_PARSER = LLMParser(BackendChatModel())

@@ -12,6 +12,7 @@ from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # 
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
 from llm.DataHandler import DataHandler
 from llm.LLM_parser import get_default_parser
+from llm.LLM_interface import make_backend
 from IPython.display import display
 import json
 # Initialize the client
@@ -152,15 +153,15 @@ gc = Geoclient()
 
 """
 NOTES:
-- you must have GEOCLIENT_API_KEY in your environment (.env or settings)
+- you must have GEOCLIENT_API_KEY/ GEOCLIENT_API_KEY in your environment (.env or settings)
 - borough names must be spelled exactly: 'Manhattan', 'Bronx', 'Brooklyn', 'Queens', 'Staten Island'
 - raw outputs are simplified using the _normalize() helper
 """
-
 print('\n------------------------ LLM Examples ------------------------')
 print("\n------------------------ Example 1: Environmental & Health Risks ------------------------")
 example_query = "Are there asbestos filings or air quality complaints near 45-10 21st Street in Queens?"
-parser = get_default_parser()
+llm_backend = make_backend(provider="gemini")
+parser = get_default_parser(backend=llm_backend)
 result = parser.route_query_to_datasets(example_query)
 print("\nQuery:", example_query)
 print("Router Result:", json.dumps(result, indent=2))
