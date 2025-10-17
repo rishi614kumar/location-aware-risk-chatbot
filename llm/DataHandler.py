@@ -1,6 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from sodapy import Socrata
+from dotenv import load_dotenv
+
+import pandas as pd
+import geopandas as gpd
+import os
 
 # Human-readable context for each dataset; extend as new sources come online.
 DATASET_DESCRIPTIONS: Dict[str, str] = {
@@ -33,6 +39,16 @@ DEFAULT_DATASET_FLAGS: Dict[str, bool] = dict(
     supports_intersections=True,
     supports_addresses=True,
 )
+
+# Socrata dataset identifiers (4-4 codes) when available.
+DATASET_API_IDS: Dict[str, str] = {
+    "Asbestos Control Program": "vq35-j9qm",
+    "Clean Air Tracking System (CATS)": "f4rp-2kvy",
+}
+
+NYC_OD_APPLICATION_TOKEN = os.getenv('NYC_OD_APPLICATION_TOKEN')
+NYC_OD_USERNAME = os.getenv('NYC_OD_USERNAME')
+NYC_OD_PASSWORD = os.getenv('NYC_OD_PASSWORD')
 
 # Canonical mapping from risk categories to the datasets that provide answers.
 cat_to_ds: Dict[str, List[str]] = {
@@ -123,6 +139,25 @@ class DataSet:
             "supports_intersections": self.supports_intersections,
             "supports_addresses": self.supports_addresses,
         }
+
+    def fetch_data_frame(self) -> pd.DataFrame:
+        """Fetch a pandas DataFrame for this dataset using its configured source."""
+        api_id = DATASET_API_IDS.get(self.name)
+        if not api_id:
+            raise NotImplementedError(f"No API mapping configured for dataset '{self.name}'")
+
+        client = Socrata("data.cityofnewyork.us", NYC_OD_APPLICATION_TOKEN, username=NYC_OD_USERNAME, password=NYC_OD_PASSWORD)
+        results = client.get(api_id, limit=1000)
+        return pd.DataFrame.from_records(results)
+
+    @property
+    def df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+        """Return a fresh DataFrame for callers expecting property-style access."""
+        return self.fetch_data_frame()
+
+    def get_df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+        """Backwards-compatible method alias to retrieve the dataset."""
+        return self.fetch_data_frame()
 
 def _build_dataset(name: str) -> DataSet:
     """Create a DataSet object from metadata tables, preserving flags & tags."""

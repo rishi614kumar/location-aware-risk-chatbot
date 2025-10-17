@@ -36,6 +36,7 @@ _BOROUGH_ALIASES: Dict[str, str] = {
 }
 
 MAIN_CATS: List[str] = list(cat_to_ds.keys())  # used for quick membership validation
+ALL_DATASETS: List[str] = sorted({name for names in cat_to_ds.values() for name in names})
 
 
 class ChatModel(Protocol):
@@ -119,7 +120,7 @@ class BackendChatModel:
 # 1) LLM CATEGORY CLASSIFIER
 # -----------------------------
 
-SYS_MULTI = """Classify the user's question into one or more of these categories:
+SYS_MULTI = f"""Classify the user's question into one or more of these categories:
 - Environmental & Health Risks
 - Zoning & Land Use
 - Construction & Permitting
@@ -128,7 +129,7 @@ SYS_MULTI = """Classify the user's question into one or more of these categories
 - Comparative Site Queries
 
 Return STRICT JSON only:
-{"categories": ["<labels>"], "confidence": <0..1>, "borough": "<borough names>"}
+{{"categories": ["<labels>"], "datasets": ["<dataset names>"], "confidence": <0..1>, "borough": "<borough names>"}}
 
 Rules:
 - Traffic, collisions, congestion, road closures, counts, speeds, hotspots -> Transportation & Traffic
@@ -139,21 +140,23 @@ Rules:
 - Comparing between two sites (more/less, better/worse, higher/lower) -> include Comparative Site Queries plus other relevant labels
 - Borough names must be one of: Queens, Manhattan, Bronx, Staten Island, Brooklyn. If the user mentions a borough, preserve it. 
     Otherwise, pick the best borough based on the query or if it is a comparative query, then include 2 or more depending on the query.
+- "datasets" should list the most relevant NYC datasets (typically 2-5) chosen from: {", ".join(ALL_DATASETS)}.
+- Prefer datasets whose categories overlap the predicted categories; only add others when clearly justified by the question.
 """.strip()
 
 FEWSHOTS_MULTI: List[Tuple[str, dict]] = [
     ("Where are the top traffic accident hotspots within 500 feet of 163rd Street?",
-     {"categories": ["Transportation & Traffic"], "confidence": 0.85, "borough": "Bronx"}),
+     {"categories": ["Transportation & Traffic"], "datasets": ["NYC OpenData Motor Vehicle Collisions", "NYC OpenData Automated Traffic Volume Counts"], "confidence": 0.85, "borough": "Bronx"}),
     ("Any active DOB permits near 10 Jay St?",
-     {"categories": ["Construction & Permitting"], "confidence": 0.85, "borough": "Brooklyn"}),
+     {"categories": ["Construction & Permitting"], "datasets": ["DOB permits", "Street Construction Permits"], "confidence": 0.85, "borough": "Brooklyn"}),
     ("Is this parcel in a historic district and what’s the zoning?",
-     {"categories": ["Zoning & Land Use"], "confidence": 0.80, "borough": "Manhattan"}),
+     {"categories": ["Zoning & Land Use"], "datasets": ["Historic Districts map", "NYC OpenData Zoning and Tax Lot Database"], "confidence": 0.80, "borough": "Manhattan"}),
     ("Any flood or sewer risk around 123 Main St?",
-     {"categories": ["Environmental & Health Risks"], "confidence": 0.80, "borough": "Queens"}),
+     {"categories": ["Environmental & Health Risks"], "datasets": ["Sewer System Data", "Clean Air Tracking System (CATS)"], "confidence": 0.80, "borough": "Queens"}),
     ("Where are the nearest fire hydrants near Borough Hall?",
-     {"categories": ["Public Safety & Social Context"], "confidence": 0.75, "borough": "Brooklyn"}),
+     {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants", "NYC OpenData Motor Vehicle Collisions"], "confidence": 0.75, "borough": "Brooklyn"}),
     ("Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
-     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "confidence": 0.88, "borough": "Manhattan"}),
+     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data", "NYC OpenData PLUTO"], "confidence": 0.88, "borough": "Manhattan"}),
 ]
 
 def _build_user_prompt_multi(query: str) -> str:
@@ -179,27 +182,77 @@ def _build_user_prompt_multi(query: str) -> str:
 # 2) ADDRESS/POI EXTRACTION
 # -----------------------------
 
-SYS_ADDR = """Extract all location mentions from the user's query as mailing-style addresses, intersections, or named places/POIs.
-Return STRICT JSON only: {"addresses":[<strings>]}
+SYS_ADDR = """Extract all location mentions from the user's query.
+Return STRICT JSON only: {"addresses":[{"house_number":"","street_name":"","borough":"","raw":"","notes":""}, ...]}
 Rules:
 - Include numbered street addresses (e.g., "10 Jay St", "123 Main Street")
-- Include intersections as "X & Y" (e.g., "149th Street & Grand Concourse")
+- For intersections output a single object with "street_name" formatted "Street A & Street B"
 - Include named places/POIs/landmarks/neighborhoods when used as locators, even without qualifiers
   (e.g., "Times Square", "Union Square Park", "Columbia University", "Penn Station")
 - If the query says "near X", include X
 - Do NOT include cities/states/countries unless explicitly mentioned
-- Preserve original wording/casing; trim whitespace
+- Preserve original wording/casing in the "raw" field; trim whitespace elsewhere
 - Deduplicate while preserving order
+Field guidance:
+- house_number: leading digits for numbered addresses; leave empty string if none
+- street_name: primary street/highway name or POI/intersection label
+- borough: Choose from Queens, Manhattan, Bronx, Staten Island, Brooklyn when determinable; otherwise empty
+- notes: optional clarifications (e.g., neighborhood). Use empty string when not needed
 """.strip()
 
 FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
-    ('Any active DOB permits near 10 Jay St?', {"addresses": ["10 Jay St"]}),
-    ('Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.',
-     {"addresses": ["149th Street & Grand Concourse", "181st Street & St. Nicholas Avenue"]}),
-    ('Traffic hotspots near Borough Hall and 123 Main St', {"addresses": ["Borough Hall", "123 Main St"]}),
-    ('What types of NYPD complaints are most common near Times Square?', {"addresses": ["Times Square"]}),
-    ('Collisions around Union Square Park and Penn Station', {"addresses": ["Union Square Park", "Penn Station"]}),
-    ('Incidents by Columbia University and Central Park West', {"addresses": ["Columbia University", "Central Park West"]}),
+    (
+        "Any active DOB permits near 10 Jay St?",
+        {
+            "addresses": [
+                {"house_number": "10", "street_name": "Jay St", "borough": "Brooklyn", "raw": "10 Jay St", "notes": ""}
+            ]
+        },
+    ),
+    (
+        "Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
+        {
+            "addresses": [
+                {"house_number": "", "street_name": "149th Street & Grand Concourse", "borough": "Bronx", "raw": "149th Street & Grand Concourse", "notes": ""},
+                {"house_number": "", "street_name": "181st Street & St. Nicholas Avenue", "borough": "Manhattan", "raw": "181st Street & St. Nicholas Avenue", "notes": ""},
+            ]
+        },
+    ),
+    (
+        "Traffic hotspots near Borough Hall and 123 Main St",
+        {
+            "addresses": [
+                {"house_number": "", "street_name": "Borough Hall", "borough": "Brooklyn", "raw": "Borough Hall", "notes": ""},
+                {"house_number": "123", "street_name": "Main St", "borough": "", "raw": "123 Main St", "notes": ""},
+            ]
+        },
+    ),
+    (
+        "What types of NYPD complaints are most common near Times Square?",
+        {
+            "addresses": [
+                {"house_number": "", "street_name": "Times Square", "borough": "Manhattan", "raw": "Times Square", "notes": ""}
+            ]
+        },
+    ),
+    (
+        "Collisions around Union Square Park and Penn Station",
+        {
+            "addresses": [
+                {"house_number": "", "street_name": "Union Square Park", "borough": "Manhattan", "raw": "Union Square Park", "notes": ""},
+                {"house_number": "", "street_name": "Penn Station", "borough": "Manhattan", "raw": "Penn Station", "notes": ""},
+            ]
+        },
+    ),
+    (
+        "Incidents by Columbia University and Central Park West",
+        {
+            "addresses": [
+                {"house_number": "", "street_name": "Columbia University", "borough": "Manhattan", "raw": "Columbia University", "notes": ""},
+                {"house_number": "", "street_name": "Central Park West", "borough": "Manhattan", "raw": "Central Park West", "notes": ""},
+            ]
+        },
+    ),
 ]
 
 def _build_user_prompt_addr(query: str) -> str:
@@ -212,20 +265,72 @@ def _build_user_prompt_addr(query: str) -> str:
     parts += [f'User: "{query}"', "JSON:"]
     return "\n".join(parts)
 
-def _normalize_dedupe(seq: Optional[List[str]]) -> List[str]:
+def _record_from_raw(raw: str) -> Dict[str, str]:
     """
-    Cleans and deduplicates a list of strings while preserving order.
-
-    Strips whitespace from each element, removes empty entries,
-    and ensures that each unique string appears only once in the output.
+    Build a structured address record from a raw substring.
     """
+    text = (raw or "").strip()
+    if not text:
+        return {"house_number": "", "street_name": "", "borough": "", "raw": "", "notes": ""}
 
-    seen, out = set(), []
-    for s in (seq or []):
-        t = (s or "").strip()
-        if t and t not in seen:
-            seen.add(t)
-            out.append(t)
+    house = ""
+    street = text
+    match = re.match(r"^\s*(\d+)\s+(.*)$", text)
+    if match:
+        house = match.group(1).strip()
+        street = match.group(2).strip()
+
+    borough = ""
+    lowered = text.lower()
+    for alias, canonical in _BOROUGH_ALIASES.items():
+        if alias and alias in lowered:
+            borough = canonical
+            break
+    else:
+        for b in BOROUGHS:
+            if b.lower() in lowered:
+                borough = b
+                break
+
+    return {
+        "house_number": house,
+        "street_name": street,
+        "borough": borough,
+        "raw": text,
+        "notes": "",
+    }
+
+
+def _normalize_dedupe(seq: Optional[List[Any]]) -> List[Dict[str, str]]:
+    """
+    Clean and deduplicate address objects while enforcing the required keys.
+    """
+    seen: set = set()
+    out: List[Dict[str, str]] = []
+    for item in seq or []:
+        if isinstance(item, dict):
+            record = {
+                "house_number": str(item.get("house_number", "") or "").strip(),
+                "street_name": str(item.get("street_name", "") or "").strip(),
+                "borough": str(item.get("borough", "") or "").strip(),
+                "raw": str(item.get("raw", "") or "").strip(),
+                "notes": str(item.get("notes", "") or "").strip(),
+            }
+            if not record["raw"]:
+                record["raw"] = record["street_name"] or record["house_number"]
+        else:
+            record = _record_from_raw(str(item))
+
+        key = (
+            record["house_number"],
+            record["street_name"],
+            record["borough"],
+            record["raw"],
+            record["notes"],
+        )
+        if record["raw"] and key not in seen:
+            seen.add(key)
+            out.append(record)
     return out
 
 # Heuristics for fallback
@@ -265,9 +370,9 @@ def _regex_place_fallback(query: str) -> List[str]:
 # End of heuristics: if the LLM misbehaves, this keeps address extraction resilient.
 
 
-def _safe_parse_addr_json(s: str) -> List[str]:
+def _safe_parse_addr_json(s: str) -> List[Dict[str, str]]:
     """
-    Safely parses a JSON string to extract address-related fields.
+    Safely parses a JSON string to extract normalized address records.
     """
     try:
         data = json.loads(s)
@@ -331,9 +436,9 @@ class LLMParser:
                 return borough
         return self._default_borough
 
-    def classify_query(self, query: str) -> Tuple[List[str], float, str]:
+    def classify_query(self, query: str) -> Tuple[List[str], List[str], float, str]:
         """
-        Classify the query into one or more categories and return confidence and borough.
+        Classify the query into one or more categories and return datasets, confidence, and borough.
         """
         user_prompt = _build_user_prompt_multi(query)
         try:
@@ -345,7 +450,8 @@ class LLMParser:
             )
             data = json.loads(raw)
         except Exception:
-            return (["Other"], 0.5, self._infer_borough_from_query(query))  # fall back gracefully when the LLM fails
+            fallback_borough = self._infer_borough_from_query(query)
+            return (["Other"], [], 0.5, fallback_borough)  # fall back gracefully when the LLM fails
 
         raw_cats = data.get("categories")
         if not raw_cats:
@@ -353,13 +459,33 @@ class LLMParser:
             raw_cats = [single] if single else []
 
         cats = [c for c in raw_cats if c in self._cat_to_ds] or ["Other"]
+
+        raw_datasets = data.get("datasets") or data.get("dataset")
+        if isinstance(raw_datasets, str):
+            raw_datasets = [raw_datasets]
+        if not isinstance(raw_datasets, list):
+            raw_datasets = []
+        datasets = []
+        for ds in raw_datasets:
+            name = (ds or "").strip()
+            if name in ALL_DATASETS and name not in datasets:
+                datasets.append(name)
+        if not datasets:
+            # fallback: accumulate from category mapping, prioritise highest-category match
+            mapped = []
+            for cat in cats:
+                for ds in self._cat_to_ds.get(cat, []):
+                    if ds not in mapped:
+                        mapped.append(ds)
+            datasets = mapped[:5]
+
         conf = float(data.get("confidence", 0.5))
         borough = self._normalize_borough(data.get("borough"))
         if borough is None:
             borough = self._infer_borough_from_query(query)
-        return cats, conf, borough
+        return cats, datasets, conf, borough
 
-    def extract_addresses(self, query: str) -> List[str]:
+    def extract_addresses(self, query: str) -> List[Dict[str, str]]:
         """
         Extract addresses/POIs with LLM call and regex fallback.
         """
@@ -383,10 +509,13 @@ class LLMParser:
         """
         Classify and extract addresses, then map to dataset names.
         """
-        cats_raw, conf, borough = self.classify_query(query)
+        cats_raw, datasets_llm, conf, borough = self.classify_query(query)
         cats = sorted(set(cats_raw))
-        # Gather every dataset referenced by the predicted categories (sorted for deterministic output).
-        dataset_names = sorted({d for c in cats for d in self._cat_to_ds.get(c, [])})
+        valid_llm = [ds for ds in datasets_llm if ds in ALL_DATASETS]
+        if valid_llm:
+            dataset_names = sorted(valid_llm)
+        else:
+            dataset_names = sorted({d for c in cats for d in self._cat_to_ds.get(c, [])})
         addr_list = self.extract_addresses(query)
         return {
             "categories": cats,

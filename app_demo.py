@@ -12,6 +12,7 @@ from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # 
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
 from llm.DataHandler import DataHandler
 from llm.LLM_parser import get_default_parser
+from IPython.display import display
 import json
 # Initialize the client
 
@@ -165,15 +166,19 @@ print("\nQuery:", example_query)
 print("Router Result:", json.dumps(result, indent=2))
 
 handler = DataHandler(result["dataset_names"])
-first_dataset = getattr(handler, "d1", None)
+first_dataset = getattr(handler, "d1")
 if first_dataset:
     print("\nFirst Dataset:", first_dataset.name)
-    print("Description:", first_dataset.description)
+    print("Description:", first_dataset.description, '\n')
+    print(first_dataset.df.shape)
+    display(first_dataset.df.head())
 
-second_dataset = getattr(handler, 'd2', None)
+second_dataset = getattr(handler, 'd2')
 if second_dataset:
     print("\nSecond Dataset:", second_dataset.name)
-    print("Description:", second_dataset.description)
+    print("Description:", second_dataset.description, '\n')
+    print(second_dataset.df.shape)
+    display(second_dataset.df.head())
 
 print("\n------------------------ Example 2: Comparative Site Queries ------------------------")
 example_query = 'Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?”'
@@ -182,12 +187,29 @@ print("\nQuery:", example_query)
 print("Router Result:", json.dumps(result, indent=2))
 
 handler = DataHandler(result["dataset_names"])
-first_dataset = getattr(handler, "d1", None)
+first_dataset = getattr(handler, "d1")
 if first_dataset:
     print("\nFirst Dataset:", first_dataset.name)
     print("Description:", first_dataset.description)
 
-second_dataset = getattr(handler, 'd2', None)
+second_dataset = getattr(handler, 'd2')
+if second_dataset:
+    print("\nSecond Dataset:", second_dataset.name)
+    print("Description:", second_dataset.description)
+
+print("\n------------------------ Example 3 Public Safety & Social Context: No Specific Address ------------------------")
+example_query = 'How does population density compare between Jackson Heights and Downtown Brooklyn?'
+result = parser.route_query_to_datasets(example_query)
+print("\nQuery:", example_query)
+print("Router Result:", json.dumps(result, indent=2))
+
+handler = DataHandler(result["dataset_names"])
+first_dataset = getattr(handler, "d1")
+if first_dataset:
+    print("\nFirst Dataset:", first_dataset.name)
+    print("Description:", first_dataset.description)
+
+second_dataset = getattr(handler, 'd2')
 if second_dataset:
     print("\nSecond Dataset:", second_dataset.name)
     print("Description:", second_dataset.description)
