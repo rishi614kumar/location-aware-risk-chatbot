@@ -64,14 +64,19 @@ class DataSet:
             "supports_addresses": self.supports_addresses,
         }
 
-    def fetch_data_frame(self) -> pd.DataFrame:
-        """Fetch a pandas DataFrame for this dataset using its configured source."""
+    def fetch_data_frame(self, where=None, limit=None) -> pd.DataFrame:
+        """Fetch a pandas DataFrame for this dataset using its configured source, with optional filtering."""
         api_id = DATASET_API_IDS.get(self.name)
         if not api_id:
             raise NotImplementedError(f"No API mapping configured for dataset '{self.name}'")
 
         client = Socrata("data.cityofnewyork.us", None)
-        results = client.get(api_id, limit=1000)
+        params = {}
+        if limit is not None:
+            params["limit"] = limit
+        if where:
+            params["where"] = where
+        results = client.get(api_id, **params)
         return pd.DataFrame.from_records(results)
 
     @property
@@ -85,6 +90,10 @@ class DataSet:
     def get_df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
         """Backwards-compatible method alias to retrieve the dataset."""
         return self.df
+
+    def df_filtered(self, where=None, limit=None) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+        """Return a DataFrame with optional filtering."""
+        return self.fetch_data_frame(where=where, limit=limit)
 
 def _build_dataset(name: str) -> DataSet:
     """Create a DataSet object from metadata tables, preserving flags & tags."""

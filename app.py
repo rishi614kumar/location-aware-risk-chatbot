@@ -4,6 +4,7 @@ from llm.DataHandler import DataHandler
 from llm.LLM_interface import Chat, make_backend
 from scripts.RiskSummarizer import summarize_risk
 from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt
+from scripts.GeoScope import get_dataset_filters
 import logging
 
 # LLM for conversational response
@@ -67,17 +68,30 @@ async def on_message(msg: cl.Message):
 
     # 3. Data preview for each dataset
     handler = DataHandler(datasets)
+    # Get filtering logic from GeoScope stub
+    dataset_filters = get_dataset_filters(addresses, handler)
     data_samples = {}
+    filtered_datasets = []
     for ds in handler:
         try:
-            df = ds.df.head(5)  # Show first 5 rows
-            data_samples[ds.name] = df
-            preview = df.to_markdown(index=False) if hasattr(df, 'to_markdown') else str(df.head())
+            filter_kwargs = dataset_filters.get(ds.name, {})
+            where = filter_kwargs.get("where")
+            limit = filter_kwargs.get("limit")
+            df_full = ds.df_filtered(where=where, limit=limit)
+            df_head = df_full.head(5)
+            # Replace DataSet's _df_cache with filtered data if filtering was applied
+            if where is not None or limit is not None:
+                object.__setattr__(ds, "_df_cache", df_full)
+            data_samples[ds.name] = df_head
+            filtered_datasets.append(ds)
+            preview = df_head.to_markdown(index=False) if hasattr(df_head, 'to_markdown') else str(df_head)
             logger.info(f'Dataset {ds.name} loaded successfully')
             await cl.Message(content=f"**{ds.name}**\n{ds.description}\n\nPreview:\n{preview}").send()
         except Exception as e:
             logger.error(f'Error loading dataset {ds.name}: {e}')
             await cl.Message(content=f"**{ds.name}**\n{ds.description}\n\nError loading data: {e}").send()
+    # Replace handler with filtered datasets
+    handler._datasets = filtered_datasets
 
     # 4. Risk summarization
     risk_summary = summarize_risk(result, handler)
