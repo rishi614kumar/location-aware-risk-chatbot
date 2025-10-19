@@ -364,8 +364,17 @@ def _safe_parse_addr_json(s: str) -> List[Dict[str, str]]:
     """
     Safely parses a JSON string to extract normalized address records.
     """
+    text = (s or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
     try:
-        data = json.loads(s)
+        data = json.loads(text)
     except Exception:
         return []
     # Look for possible address-related keys
