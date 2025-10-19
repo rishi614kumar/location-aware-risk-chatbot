@@ -4,3 +4,6 @@ fiona
 pandas
 pyproj
 pytest
+google-generativeai
+python-dotenv
+sodapy

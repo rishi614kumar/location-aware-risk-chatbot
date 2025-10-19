@@ -10,7 +10,13 @@ from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon
 from adapters.street_span import get_bbls_from_lion_span, get_lion_span_from_bbl  # Kevin
 from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # Max
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
+from llm.DataHandler import DataHandler
+from llm.LLM_parser import get_default_parser
+from llm.LLM_interface import make_backend
+from IPython.display import display
+import json
 # Initialize the client
+
 gc = Geoclient()
 
 # Address -> Full Info 
@@ -147,7 +153,64 @@ print(f"Precinct for BBL {sample_bbl}:", precinct_for_bbl)
 
 """
 NOTES:
-- you must have GEOCLIENT_API_KEY in your environment (.env or settings)
+- you must have GEOCLIENT_API_KEY/ GEOCLIENT_API_KEY in your environment (.env or settings)
 - borough names must be spelled exactly: 'Manhattan', 'Bronx', 'Brooklyn', 'Queens', 'Staten Island'
 - raw outputs are simplified using the _normalize() helper
 """
+print('\n------------------------ LLM Examples ------------------------')
+print("\n------------------------ Example 1: Environmental & Health Risks ------------------------")
+example_query = "Are there asbestos filings or air quality complaints near 45-10 21st Street in Queens?"
+llm_backend = make_backend(provider="gemini")
+parser = get_default_parser(backend=llm_backend)
+result = parser.route_query_to_datasets(example_query)
+print("\nQuery:", example_query)
+print("Router Result:", json.dumps(result, indent=2))
+
+handler = DataHandler(result["dataset_names"])
+first_dataset = getattr(handler, "d1")
+if first_dataset:
+    print("\nFirst Dataset:", first_dataset.name)
+    print("Description:", first_dataset.description, '\n')
+    print(first_dataset.df.shape)
+    display(first_dataset.df.head())
+
+second_dataset = getattr(handler, 'd2')
+if second_dataset:
+    print("\nSecond Dataset:", second_dataset.name)
+    print("Description:", second_dataset.description, '\n')
+    print(second_dataset.df.shape)
+    display(second_dataset.df.head())
+
+print("\n------------------------ Example 2: Comparative Site Queries ------------------------")
+example_query = 'Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?”'
+result = parser.route_query_to_datasets(example_query)
+print("\nQuery:", example_query)
+print("Router Result:", json.dumps(result, indent=2))
+
+handler = DataHandler(result["dataset_names"])
+first_dataset = getattr(handler, "d1")
+if first_dataset:
+    print("\nFirst Dataset:", first_dataset.name)
+    print("Description:", first_dataset.description)
+
+second_dataset = getattr(handler, 'd2')
+if second_dataset:
+    print("\nSecond Dataset:", second_dataset.name)
+    print("Description:", second_dataset.description)
+
+print("\n------------------------ Example 3 Public Safety & Social Context: No Specific Address ------------------------")
+example_query = 'How does population density compare between Jackson Heights and Downtown Brooklyn?'
+result = parser.route_query_to_datasets(example_query)
+print("\nQuery:", example_query)
+print("Router Result:", json.dumps(result, indent=2))
+
+handler = DataHandler(result["dataset_names"])
+first_dataset = getattr(handler, "d1")
+if first_dataset:
+    print("\nFirst Dataset:", first_dataset.name)
+    print("Description:", first_dataset.description)
+
+second_dataset = getattr(handler, 'd2')
+if second_dataset:
+    print("\nSecond Dataset:", second_dataset.name)
+    print("Description:", second_dataset.description)
