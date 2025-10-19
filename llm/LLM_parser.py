@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 from dotenv import load_dotenv
 from llm.LLM_interface import ChatBackend, Chat, make_backend
 from llm.DataHandler import cat_to_ds
+from config import settings
 
 
 # -----------------------------
@@ -19,22 +20,10 @@ from llm.DataHandler import cat_to_ds
 # -----------------------------
 load_dotenv()  # ensure GEMINI_KEY / provider overrides are available to downstream clients
 
-BOROUGHS: Tuple[str, ...] = ("Queens", "Manhattan", "Bronx", "Staten Island", "Brooklyn")
-
-_BOROUGH_ALIASES: Dict[str, str] = {
-    "queens": "Queens",
-    "manhattan": "Manhattan",
-    "the bronx": "Bronx",
-    "bronx": "Bronx",
-    "brooklyn": "Brooklyn",
-    "bk": "Brooklyn",
-    "staten island": "Staten Island",
-    "staten-island": "Staten Island",
-    "si": "Staten Island",
-}
-
-MAIN_CATS: List[str] = list(cat_to_ds.keys())  # used for quick membership validation
-ALL_DATASETS: List[str] = sorted({name for names in cat_to_ds.values() for name in names})
+BOROUGHS: Tuple[str, ...] = settings.BOROUGHS
+_BOROUGH_ALIASES: Dict[str, str] = settings._BOROUGH_ALIASES
+MAIN_CATS: List[str] = settings.MAIN_CATS
+ALL_DATASETS: List[str] = settings.ALL_DATASETS
 
 
 class ChatModel(Protocol):

@@ -4,7 +4,6 @@ fiona
 pandas
 pyproj
 pytest
-ollama
 google-generativeai
 python-dotenv
 sodapy
