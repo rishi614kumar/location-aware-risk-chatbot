@@ -1,7 +1,7 @@
 # tests/test_geobundle.py
 import os
 import pytest
-from scripts.geobundle import geo_from_address, geo_from_bbl
+from scripts.GeoBundle import geo_from_address, geo_from_bbl
 from adapters.schemas import GeoBundle
 
 @pytest.mark.skipif(not os.getenv("GEOCLIENT_API_KEY"), reason="Needs Geoclient key")

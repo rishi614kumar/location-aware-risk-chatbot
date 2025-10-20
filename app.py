@@ -1,7 +1,7 @@
 import chainlit as cl
-from llm.LLM_parser import route_query_to_datasets_multi
-from llm.DataHandler import DataHandler
-from llm.LLM_interface import Chat, make_backend
+from llm.LLMParser import route_query_to_datasets_multi
+from scripts.DataHandler import DataHandler
+from llm.LLMInterface import Chat, make_backend
 from scripts.RiskSummarizer import summarize_risk
 from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt
 from scripts.GeoScope import get_dataset_filters
