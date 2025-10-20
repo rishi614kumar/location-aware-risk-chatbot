@@ -9,7 +9,7 @@ def test_geo_from_address_shape():
     b = geo_from_address("237 Park Ave", "Manhattan")
     assert isinstance(b, GeoBundle)
     assert b.bbl is not None
-    assert b.sources.geoclient is not None  # precinct should come from geoclient in address flow
+    assert b.sources.precinct == "geoclient"  # precinct should come from geoclient in address flow
 
 def test_geo_from_bbl_shape():
     b = geo_from_bbl("1013007501")  # known good BBL
