@@ -1,0 +1,347 @@
+/* ============================================
+   CHAINLIT — Columbia Theme
+   Palette
+     Columbia Blue: #9BDDFF
+     Sky Tint:      #E5F6FF
+     Columbia Navy: #003366
+     Deep Blue:     #0055A4
+     Midnight:      #0B1C2E
+   Typography
+     Headlines: serif accent
+     UI/Body:   clean sans
+   ============================================ */
+
+:root {
+  /* Core palette */
+  --cu-blue: #9BDDFF;
+  --cu-blue-200: #bfe6ff;
+  --cu-blue-50: #E5F6FF;
+  --cu-navy: #003366;
+  --cu-deep: #0055A4;
+  --cu-midnight: #0B1C2E;
+
+  /* Neutrals */
+  --bg: #F7FBFF;
+  --surface: #ffffff;
+  --text: #0A2440;
+  --muted: #4A617A;
+  --divider: #D9ECFA;
+
+  /* Accents/States */
+  --success: #2ea44f;
+  --warning: #ffb020;
+  --danger:  #d93025;
+
+  /* Effects */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --shadow-xs: 0 2px 8px rgba(0, 51, 102, 0.08);
+  --shadow-sm: 0 6px 18px rgba(0, 51, 102, 0.10);
+  --shadow-md: 0 14px 36px rgba(0, 51, 102, 0.12);
+  --glass: rgba(255,255,255,0.72);
+  --glass-strong: rgba(255,255,255,0.88);
+
+  /* Typography */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  --font-serif: "Merriweather", Georgia, "Times New Roman", serif;
+
+  /* Sizing */
+  --header-h: 68px;
+  --sidebar-w: 300px;
+
+  /* Animations */
+  --easing: cubic-bezier(.2,.8,.2,1);
+  --speed: 180ms;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #071320;
+    --surface: #0d1a2b;
+    --text: #E8F3FF;
+    --muted: #B6CBE0;
+    --divider: #19324A;
+    --glass: rgba(10, 24, 40, 0.55);
+    --glass-strong: rgba(15, 31, 52, 0.72);
+    --shadow-xs: 0 2px 10px rgba(0,0,0,0.45);
+    --shadow-sm: 0 10px 26px rgba(0,0,0,0.45);
+    --shadow-md: 0 20px 48px rgba(0,0,0,0.5);
+  }
+}
+
+/* --------------------------------------------
+   Page background & global type
+--------------------------------------------- */
+html, body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(1200px 900px at 15% -10%, var(--cu-blue-50) 0%, transparent 60%),
+              radial-gradient(1400px 1100px at 110% 110%, var(--cu-blue) 0%, transparent 70%),
+              linear-gradient(135deg, var(--cu-blue) 0%, var(--cu-blue-50) 100%) !important;
+  background-attachment: fixed;
+  color: var(--text) !important;
+  font-family: var(--font-ui) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --------------------------------------------
+   Header
+--------------------------------------------- */
+.cl-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+  backdrop-filter: saturate(130%) blur(10px);
+  border-bottom: 2px solid var(--divider);
+  box-shadow: var(--shadow-sm);
+  padding: 0 1.25rem;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.cl-header .title,
+.cl-header h1,
+.cl-header h2 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: .3px;
+  color: var(--cu-navy);
+}
+
+/* Small Columbia crown accent */
+.cl-header::before {
+  content: "♕";
+  color: var(--cu-deep);
+  margin-right: .25rem;
+  font-size: 1.1rem;
+  transform: translateY(1px);
+}
+
+/* --------------------------------------------
+   Sidebar
+--------------------------------------------- */
+.cl-sidebar {
+  width: var(--sidebar-w);
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+  backdrop-filter: blur(12px) saturate(135%);
+  border-right: 1px solid var(--divider);
+  box-shadow: var(--shadow-xs);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  color: var(--text) !important;
+}
+
+.cl-sidebar .section-title {
+  font-family: var(--font-serif);
+  color: var(--cu-navy);
+  font-weight: 700;
+  margin: 1rem 1rem .5rem;
+}
+
+/* --------------------------------------------
+   Chat area
+--------------------------------------------- */
+.cl-chat {
+  background: transparent !important;
+  padding: 1.25rem;
+}
+
+/* Message cards (glassmorphism) */
+.cl-message {
+  background: var(--surface) !important;
+  border: 1px solid var(--divider) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem 1.1rem;
+  margin: 0 0 1rem 0;
+  transition: transform var(--speed) var(--easing), box-shadow var(--speed) var(--easing);
+}
+
+.cl-message:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Role tinting */
+.cl-message.assistant { border-left: 4px solid var(--cu-deep); }
+.cl-message.user       { border-left: 4px solid var(--cu-blue); }
+.cl-message.system     { border-left: 4px solid var(--muted);   }
+.cl-message.tool       { border-left: 4px solid var(--warning); }
+
+/* Avatars */
+.cl-avatar {
+  box-shadow: 0 0 0 3px var(--surface), 0 6px 16px rgba(0,0,0,.08);
+  border-radius: 50%;
+}
+
+/* Typing indicator */
+.cl-typing {
+  color: var(--muted);
+}
+
+/* --------------------------------------------
+   Inputs / Composer
+--------------------------------------------- */
+.cl-composer, .cl-footer {
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+  backdrop-filter: blur(10px) saturate(135%);
+  border-top: 1px solid var(--divider);
+  padding: .85rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.cl-input, textarea, input[type="text"] {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: .85rem 1rem;
+  outline: none;
+  transition: border var(--speed) var(--easing), box-shadow var(--speed) var(--easing);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.025);
+}
+
+.cl-input:focus, textarea:focus, input[type="text"]:focus {
+  border-color: var(--cu-deep);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--cu-deep) 20%, transparent);
+}
+
+/* Send button + primary buttons */
+button, .send-btn, .cl-button-primary {
+  background: linear-gradient(180deg, var(--cu-navy), #022e5c) !important;
+  color: #fff !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  padding: .7rem 1.1rem !important;
+  box-shadow: 0 8px 18px rgba(0, 51, 102, 0.24);
+  transition: transform var(--speed) var(--easing), box-shadow var(--speed) var(--easing), background var(--speed) var(--easing);
+}
+
+button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(0, 51, 102, 0.30);
+  background: linear-gradient(180deg, var(--cu-deep), #024d8f) !important;
+  outline: none !important;
+}
+
+/* Secondary/ghost buttons */
+.cl-button-ghost {
+  background: transparent !important;
+  color: var(--cu-deep) !important;
+  border: 1px solid var(--divider) !important;
+  border-radius: 12px !important;
+}
+.cl-button-ghost:hover { background: color-mix(in oklab, var(--cu-blue-50) 60%, transparent); }
+
+/* --------------------------------------------
+   Markdown & code
+--------------------------------------------- */
+.cl-message pre, pre {
+  background: #0f2136;
+  color: #e9f2ff;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  overflow: auto;
+  border: 1px solid #18324c;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+.cl-message code, code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: .92rem;
+}
+.cl-message p, .cl-message li {
+  line-height: 1.6;
+  font-size: 1rem;
+}
+.cl-message h1, .cl-message h2, .cl-message h3 {
+  font-family: var(--font-serif);
+  color: var(--cu-navy);
+  margin: .2rem 0 .4rem;
+}
+
+/* Inline callouts/badges */
+.badge {
+  display: inline-block;
+  font-weight: 600;
+  font-size: .78rem;
+  padding: .28rem .55rem;
+  border-radius: 999px;
+  background: var(--cu-blue-50);
+  color: var(--cu-deep);
+  border: 1px solid var(--divider);
+}
+
+/* --------------------------------------------
+   Utilities & details
+--------------------------------------------- */
+.cl-message a {
+  color: var(--cu-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cl-message a:hover { color: color-mix(in oklab, var(--cu-deep) 85%, var(--cu-blue)); }
+
+.cl-file, .cl-attachment, .cl-card {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; background: var(--cu-blue-50); }
+::-webkit-scrollbar-thumb { background: var(--cu-blue); border-radius: 8px; border: 2px solid var(--cu-blue-50); }
+
+/* Focus rings (keyboard a11y) */
+*:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--cu-blue) 60%, white);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* Tooltips/Modals */
+.cl-tooltip, .cl-modal {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+/* Message subtle entrance */
+@media (prefers-reduced-motion: no-preference) {
+  .cl-message {
+    animation: cu-float-in .25s var(--easing) both;
+  }
+  @keyframes cu-float-in {
+    from { opacity: 0; transform: translateY(4px) scale(.995); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+  }
+}
+
+/* Compact on small screens */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 0px; }
+  .cl-header { height: calc(var(--header-h) - 6px); }
+  .cl-chat { padding: .75rem; }
+  .cl-message { border-radius: 14px; padding: .9rem .95rem; }
+}
+
+/* High-contrast helper (add .hc to <body> to force) */
+body.hc {
+  --divider: #22476b;
+  --surface: #ffffff;
+  --text: #001a33;
+  --muted: #163a59;
+}
+
