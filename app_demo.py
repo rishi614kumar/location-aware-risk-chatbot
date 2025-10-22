@@ -3,7 +3,7 @@ Demo script for using Geoclient API helper functions.
 Run with:  python -m app_demo
 """
 
-from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
+from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
 from scripts.GeoBundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
 from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon
@@ -43,12 +43,6 @@ try:
     print("OK.")
 except Exception as e:
     print("expected error:", e)
-
-
-from api.GeoClient import (
-    get_bins_from_address, get_bin_from_address,
-    get_bins_from_bbl, get_bbl_from_bin
-)
 
 # Address -> one BIN
 print("\n------------------------Example 4: Address to one BIN------------------------")
@@ -180,6 +174,7 @@ if second_dataset:
     print("Description:", second_dataset.description, '\n')
     print(second_dataset.df.shape)
     display(second_dataset.df.head())
+
 
 print("\n------------------------ Example 2: Comparative Site Queries ------------------------")
 example_query = 'Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?”'

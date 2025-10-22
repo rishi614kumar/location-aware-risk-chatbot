@@ -179,15 +179,18 @@ Rules:
 - For intersections output a single object with "street_name" formatted "Street A & Street B"
 - Include named places/POIs/landmarks/neighborhoods when used as locators, even without qualifiers
   (e.g., "Times Square", "Union Square Park", "Columbia University", "Penn Station")
-- If the query says "near X", include X
+- When a broad landmark is mentioned, output the best-known street address or intersection for that landmark.
+  Preserve the spoken landmark name in the "notes" field.
+- When a neighborhood or area (e.g., "East Harlem") is mentioned, output a representative street address or main intersection within that neighborhood.
+  - If the query says "near X", include X
 - Do NOT include cities/states/countries unless explicitly mentioned
 - Preserve original wording/casing in the "raw" field; trim whitespace elsewhere
 - Deduplicate while preserving order
 Field guidance:
 - house_number: leading digits for numbered addresses; leave empty string if none
-- street_name: primary street/highway name or POI/intersection label
+- street_name: primary street/highway name or POI/intersection label (use intersections for landmarks when appropriate)
 - borough: Choose from Queens, Manhattan, Bronx, Staten Island, Brooklyn when determinable; otherwise empty
-- notes: optional clarifications (e.g., neighborhood). Use empty string when not needed
+- notes: optional clarifications (e.g., original landmark wording). Use empty string when not needed
 """.strip()
 
 FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
@@ -221,7 +224,7 @@ FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
         "What types of NYPD complaints are most common near Times Square?",
         {
             "addresses": [
-                {"house_number": "", "street_name": "Times Square", "borough": "Manhattan", "raw": "Times Square", "notes": ""}
+                {"house_number": "", "street_name": "Broadway & 7th Avenue", "borough": "Manhattan", "raw": "Times Square", "notes": "Times Square"}
             ]
         },
     ),
@@ -229,8 +232,8 @@ FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
         "Collisions around Union Square Park and Penn Station",
         {
             "addresses": [
-                {"house_number": "", "street_name": "Union Square Park", "borough": "Manhattan", "raw": "Union Square Park", "notes": ""},
-                {"house_number": "", "street_name": "Penn Station", "borough": "Manhattan", "raw": "Penn Station", "notes": ""},
+                {"house_number": "", "street_name": "14th Street & Broadway", "borough": "Manhattan", "raw": "Union Square Park", "notes": "Union Square Park"},
+                {"house_number": "", "street_name": "34th Street & 7th Avenue", "borough": "Manhattan", "raw": "Penn Station", "notes": "Penn Station"},
             ]
         },
     ),
@@ -238,11 +241,13 @@ FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
         "Incidents by Columbia University and Central Park West",
         {
             "addresses": [
-                {"house_number": "", "street_name": "Columbia University", "borough": "Manhattan", "raw": "Columbia University", "notes": ""},
+                {"house_number": "", "street_name": "116th Street & Broadway", "borough": "Manhattan", "raw": "Columbia University", "notes": "Columbia University"},
                 {"house_number": "", "street_name": "Central Park West", "borough": "Manhattan", "raw": "Central Park West", "notes": ""},
+                {"house_number": "", "street_name": "East 125th Street & Lexington Avenue", "borough": "Manhattan", "raw": "East Harlem", "notes": "East Harlem"},
             ]
         },
     ),
+            
 ]
 
 def _build_user_prompt_addr(query: str) -> str:
