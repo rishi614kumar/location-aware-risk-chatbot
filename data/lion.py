@@ -92,7 +92,7 @@ def load_lion_geom(layer: Optional[str] = None) -> gpd.GeoDataFrame:
       returns columns ['_street_name', '_width_ft', 'geometry']
     """
     gdf = _load_lion_base(layer)
-    keep = ["_street_name", "_width_ft", "geometry"]
+    keep = ["_street_name", "_width_ft", "geometry","SegmentID"]  # SegmentID is useful if present
     return gdf[keep].copy()
 
 @lru_cache(maxsize=4)
