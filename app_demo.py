@@ -173,11 +173,6 @@ if first_dataset:
     print("Description:", first_dataset.description, '\n')
     print(first_dataset.df.shape)
     display(first_dataset.df.head())
-    try:
-        df = first_dataset.df
-        print(f"✅ Columns ({len(df.columns)}):\n{df.columns.tolist()}\n")
-    except Exception as e:
-        print(f"⚠️ Failed to load DataFrame: {e}")
 
 second_dataset = getattr(handler, 'd2')
 if second_dataset:
