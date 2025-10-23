@@ -1,9 +1,10 @@
 # scripts/RiskSummarizer.py
 
-def summarize_risk(parsed_result, data_handler=None):
+def summarize_risk(user_text, parsed_result, data_handler=None):
     """
     Stub for risk summarization. In production, this would use an LLM or rules to summarize risk.
     Args:
+        user_text: str original user input text
         parsed_result: dict from the parser (categories, addresses, datasets, etc.)
         data_handler: DataHandler instance for full access to all queried datasets
     Returns:
