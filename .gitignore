@@ -1,5 +1,7 @@
 .env
 capstone.venv/
+scoped_asbestos_data.csv
+Asbestos_Control_Program_(ACP7)_20251022.csv
 *.gdb
 *.gpkg
 /data/raw/
