@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Any, List
 
 # Reuse your existing modules/utilities
-from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_bbl
+from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.schemas import GeoBundle, SourceMeta
 
