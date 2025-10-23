@@ -33,8 +33,8 @@ def get_conversational_meta_prompt(user_text: str) -> str:
     """
     return (
         f'''$(META-PROMPT: respond conversationally to the user.
-        do not actually answer any queries that the user has,
-        later stages will address the query.
+        do not actually answer any queries that the user has,later stages will address the query.
+        you just need to acknowledge the user's input and let them know you are processing it.
         query: {user_text})'''
     )
 
@@ -48,5 +48,17 @@ def get_followup_prompt(result, risk_summary) -> str:
     addresses = ', '.join(a.get('raw', '') for a in result.get('address', []))
     return (
         f'''$(META-PROMPT: Based on the parsed categories ({cats}), datasets ({datasets}), addresses ({addresses}), and the following risk summary:\n{risk_summary}\n\nSuggest a specific, context-aware follow-up question for the user. Only ask about relevant details, trends, or comparisons that would help the user get more insight. Keep in mind that this is at the end of a conversation and should flow naturally from all the given information.)'''
+    )
+
+def get_loading_datasets_prompt(handler) -> str:
+    """
+    Returns a string describing what datasets are being loaded, based on the handler object.
+    """
+    if not hasattr(handler, 'names') or not handler.names:
+        names = ["No datasets to load."]
+    else:
+        names = handler.names
+    return (
+        f'''$(META-PROMPT: Based on the following datasets being loaded: {', '.join(names)}, inform the user that the data is being fetched and processed. This may take a moment.)'''
     )
 
