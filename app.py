@@ -3,7 +3,7 @@ from llm.LLMParser import route_query_to_datasets_multi
 from scripts.DataHandler import DataHandler
 from llm.LLMInterface import Chat, make_backend
 from scripts.RiskSummarizer import summarize_risk
-from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt
+from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt, get_loading_datasets_prompt
 from scripts.GeoScope import get_dataset_filters
 import logging
 import asyncio
@@ -66,11 +66,17 @@ async def on_message(msg: cl.Message):
         )
         logger.info(f'Formatted parsing output: {formatted}')
         await cl.Message(content=formatted).send()
-
+    
     # 3. Data preview for each dataset
     handler = DataHandler(datasets)
     logger.info(f"Handler initialized with datasets: {handler.names}")
-    # Get filtering logic from GeoScope stub
+    
+    # Get filtering logic from GeoScope 
+    llm_data_response = llm_chat.ask(get_loading_datasets_prompt(handler))
+    logger.info(f'LLM Data Loading Response: {llm_data_response}')
+    await cl.Message(content=f"{llm_data_response}").send()
+    await asyncio.sleep(0)
+
     try:
         logger.info(f"Calling get_dataset_filters with addresses: {addresses}")
         dataset_filters = await asyncio.to_thread(get_dataset_filters, addresses, handler)
@@ -81,9 +87,7 @@ async def on_message(msg: cl.Message):
         await asyncio.sleep(0)
         dataset_filters = {}
 
-    await cl.Message(content="Loading datasets...").send()
-    await asyncio.sleep(0)
-
+    
     data_samples = {}
     filtered_datasets = []
     for ds in handler:
