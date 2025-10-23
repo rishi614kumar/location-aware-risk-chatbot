@@ -1,4 +1,5 @@
 .env
+capstone.venv/
 *.gdb
 *.gpkg
 /data/raw/
