@@ -3,7 +3,7 @@ Demo script for using Geoclient API helper functions.
 Run with:  python -m app_demo
 """
 
-from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
+from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
 from scripts.GeoBundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
 from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon
@@ -45,7 +45,7 @@ except Exception as e:
     print("expected error:", e)
 
 
-from api.GeoClient import (
+from api.geoclient import (
     get_bins_from_address, get_bin_from_address,
     get_bins_from_bbl, get_bbl_from_bin
 )
@@ -173,6 +173,11 @@ if first_dataset:
     print("Description:", first_dataset.description, '\n')
     print(first_dataset.df.shape)
     display(first_dataset.df.head())
+    try:
+        df = first_dataset.df
+        print(f"✅ Columns ({len(df.columns)}):\n{df.columns.tolist()}\n")
+    except Exception as e:
+        print(f"⚠️ Failed to load DataFrame: {e}")
 
 second_dataset = getattr(handler, 'd2')
 if second_dataset:

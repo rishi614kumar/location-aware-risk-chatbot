@@ -123,6 +123,11 @@ _BOROUGH_ALIASES = {
 MAIN_CATS = list(cat_to_ds.keys())
 ALL_DATASETS = sorted({name for names in cat_to_ds.values() for name in names})
 
+#Dataset Geo Config
+DATASET_CONFIG = {
+    "Asbestos Control Program": {"geo_field": "BBL"},
+}
+
 def check_env():
     missing = [k for k, v in globals().items() if k.isupper() and v is None]
     if missing:
