@@ -1,4 +1,5 @@
 # scripts/RiskSummarizer.py
+from llm.LLMInterface import Chat, make_backend
 
 def summarize_risk(user_text, parsed_result, data_handler=None):
     """
@@ -18,8 +19,37 @@ def summarize_risk(user_text, parsed_result, data_handler=None):
         f"Addresses: {', '.join(a.get('raw','') for a in addresses) if addresses else 'N/A'}.",
         f"Datasets: {', '.join(datasets) if datasets else 'N/A'}."
     ]
+    prompt = (f"""
+    You are a helpful assistant for NYC risk and compliance questions, related to building and construction risks.
+    The user has asked the following question: \n{user_text} \n.
+    Based on these questions, we have identified that the following categories are relevant: {', '.join(cats) if cats else 'N/A'} \n.
+    Futhermore, we have identified that the question is related to the following address(es): \n
+    {addresses} \n
+    Furthermore, we have identified that the question is related to the following dataset(s): \n
+    {datasets} \n
+    These datasets are geo-referenced datasets, meaning that each row corresponds to a certain location.
+    From these datasets, we have extracted the rows corresponding to locations that are located on 
+    street segments that touch the address(es) provided. \n
+
+    Below, I will provide the name of each dataset, a description of the dataset, and the extracted rows as mentioned above. \n\n
+    """)   
     if data_handler:
         for ds in data_handler:
-            summary.append(f"Full data for {ds.name}: shape={ds.df.shape}")
-    summary.append("(This is a placeholder. Replace with real risk analysis logic.)")
-    return '\n'.join(summary)
+            prompt += (f"""
+                Extracted data for dataset:{ds.name}:\n
+                Which has the following description: {ds.description}\n
+                Extracted rows: \n \n
+                {ds.df.head(100).to_markdown(index=False)} \n \n
+            """)
+            print("length of extracted rows: ", len(ds.df))
+    prompt += (f"""
+        Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
+    """)
+    print("Prompt for risk summarization: \n", prompt)
+    chat = Chat(make_backend(provider="gemini"))
+    chat.start()
+    response = chat.ask(prompt)
+    chat.reset()
+    print("Response from risk summarization: \n", response)
+    return response
+
