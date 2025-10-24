@@ -16,7 +16,7 @@ def get_asbestos_data(bbl_list: List[str]) -> pd.DataFrame:
     """
     
     # --- FIXED MOCK DATA SET ---
-    # Total of 41 BBLs analyzed by the teammate
+    # Total of 41 BBLs analyzed 
     NUM_BBLS = len(bbl_list)
     
     # Create fixed data to ensure the risk tiering logic is testable:
