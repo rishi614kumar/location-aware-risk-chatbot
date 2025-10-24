@@ -122,8 +122,7 @@ def generate_nta_risk_summary(nta_code: str, nta_name: str) -> str:
 
     print(f"   -> Found {len(bbl_list)} properties. Retrieving raw data...")
     
-    # 2. RETRIEVE RAW RISK DATA (Uses teammate's data loader)
-    # The dependency is here. This function must be provided by your teammate.
+    # 2. RETRIEVE RAW RISK DATA 
     raw_risk_data = get_asbestos_data(bbl_list)
     
     # 3. AGGREGATE SCORES & CHECKING
