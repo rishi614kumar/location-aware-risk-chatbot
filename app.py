@@ -118,7 +118,7 @@ async def on_message(msg: cl.Message):
 
     # 4. Risk summarization
     try:
-        risk_summary = await asyncio.to_thread(summarize_risk, user_text, result, handler)
+        risk_summary = await asyncio.to_thread(summarize_risk, user_text, result, handler, llm_chat)
         logger.info(f'Risk summary: {risk_summary}')
         await cl.Message(content=f"**Risk Summary:**\n{risk_summary}").send()
         await asyncio.sleep(0)

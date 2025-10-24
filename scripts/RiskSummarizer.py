@@ -1,7 +1,7 @@
 # scripts/RiskSummarizer.py
 from llm.LLMInterface import Chat, make_backend
 
-def summarize_risk(user_text, parsed_result, data_handler=None):
+def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat = None) -> str:
     """
     Stub for risk summarization. In production, this would use an LLM or rules to summarize risk.
     Args:
@@ -46,10 +46,15 @@ def summarize_risk(user_text, parsed_result, data_handler=None):
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
     print("Prompt for risk summarization: \n", prompt)
-    chat = Chat(make_backend(provider="gemini"))
-    chat.start()
-    response = chat.ask(prompt)
-    chat.reset()
-    print("Response from risk summarization: \n", response)
+    if llm_chat:
+        response = llm_chat.ask(prompt)
+        print("Response from risk summarization: \n", response)
+        return response
+    else:
+        chat = Chat(make_backend(provider="gemini"))
+        chat.start()
+        response = chat.ask(prompt)
+        chat.reset()
+        print("Response from risk summarization: \n", response)
     return response
 
