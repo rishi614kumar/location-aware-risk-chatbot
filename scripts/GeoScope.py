@@ -2,6 +2,7 @@
 GeoScope stub: returns a filter dict for each dataset.
 Replace logic here to generate spatial filters based on addresses and handler.datasets.
 """
+
 from __future__ import annotations
 from typing import Dict, Any, List
 
