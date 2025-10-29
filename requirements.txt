@@ -9,3 +9,4 @@ python-dotenv
 sodapy
 tabulate
 openai
+httpx<0.28
