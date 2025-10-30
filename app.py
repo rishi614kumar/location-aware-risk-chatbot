@@ -9,7 +9,7 @@ import logging
 import asyncio
 
 # LLM for conversational response
-llm_chat = Chat(make_backend(provider="gemini"))
+llm_chat = Chat(make_backend(provider="openai"))
 
 logging.basicConfig(
     level=logging.INFO,
