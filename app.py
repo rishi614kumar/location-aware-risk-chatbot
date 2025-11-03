@@ -34,6 +34,7 @@ async def on_message(msg: cl.Message):
     await cl.Message(content=f"{llm_response}").send()
 
     # 2. Parse for structured info
+    # parser = get_default_parser(backend=llm_backend)
     result = route_query_to_datasets_multi(user_text)
     logger.info(f'Parsed result: {result}')
     categories = result.get('categories', [])
