@@ -5,7 +5,7 @@ Replace logic here to generate spatial filters based on addresses and handler.da
 from __future__ import annotations
 from typing import Dict, Any, List
 
-from api.GeoClient import get_bbl_from_address
+from api.geoclient import get_bbl_from_address
 from adapters.surrounding import get_surrounding_bbls_from_bbl
 
 
