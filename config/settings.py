@@ -7,6 +7,18 @@ GEOCLIENT_API_KEY= os.getenv("GEOCLIENT_API_KEY")
 MAPPLUTO_GDB_PATH = os.getenv("MAPPLUTO_GDB_PATH")
 LION_GDB_PATH = os.getenv("LION_GDB_PATH")
 NTA_PATH = os.getenv("NTA_PATH") # https://data.cityofnewyork.us/resource/9nt8-h7nd.geojson
+CRIME_PATH = os.getenv("CRIME_PATH")
+
+FLATFILE_PATHS = {
+    "Crime": CRIME_PATH,
+    # Add more flatfile dataset paths here
+}
+# For gdb datasets, specify layer names
+FLATFILE_LAYERS = {
+    "Crime": None,  # e.g., "layer_name"
+}
+
+
 
 # STREET_SPAN SETTINGS
 MAX_BUFFER_FT = 120  # Maximum buffer distance in feet
@@ -157,6 +169,9 @@ DATASET_API_IDS = {
     "Citywide Hydrants" : "5bgh-vtsn",
     "Street Pavement Rating" : "6yyb-pb25"
 }
+
+
+
 
 # Canonical mapping from risk categories to the datasets that provide answers.
 cat_to_ds = {

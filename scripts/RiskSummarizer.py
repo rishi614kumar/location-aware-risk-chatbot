@@ -45,7 +45,7 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
     prompt += (f"""
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
-    print("Prompt for risk summarization: \n", prompt)
+    # print("Prompt for risk summarization: \n", prompt)
     if llm_chat:
         response = llm_chat.ask(prompt)
         print("Response from risk summarization: \n", response)
