@@ -244,7 +244,13 @@ ALL_DATASETS = sorted({name for names in cat_to_ds.values() for name in names})
 
 #Dataset Geo Config
 DATASET_CONFIG = {
-    "Asbestos Control Program": {"geo_field": "BBL"},
+    "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street"},
+    "Crime": {"geo_unit": "PRECINCT", "mode": "street"},
+    "Sewer System Data": {"geo_unit": "LONLAT", "mode": "radius"},
+    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius"},
+    "Population by Community Districts": {"geo_unit": None, "mode": "street"},
+    "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street"},
+    # Add more dataset configurations as needed
 }
 
 def check_env():

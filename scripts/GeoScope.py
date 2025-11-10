@@ -7,9 +7,14 @@ from typing import Dict, Any, List
 
 from api.GeoClient import get_bbl_from_address
 from adapters.surrounding import get_surrounding_bbls_from_bbl
+from adapters.coords import get_lonlat_from_bbl
+from adapters.precinct import get_precinct_from_bbl
+from adapters.nta import get_nta_from_bbl
+from adapters.street_span import get_lion_span_from_bbl
+from config.settings import DATASET_CONFIG
 
 
-def get_dataset_filters(addresses: List[Dict[str, Any]], handler) -> Dict[str, Dict[str, Any]]:
+def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=True) -> Dict[str, Dict[str, Any]]:
     filters: Dict[str, Dict[str, Any]] = {}
 
     if not addresses:
@@ -44,41 +49,95 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler) -> Dict[str, D
         return filters
 
     # --- Step 2: find surrounding BBLs ---
-    try:
-        nearby_bbls = list(get_surrounding_bbls_from_bbl(
-            bbl=bbl,
-            mode="street",      # or "radius"
-            include_self=True
-        ))
-        print(f"✅ Found {len(nearby_bbls)} surrounding BBLs")
-    except Exception as e:
-        print(f"⚠️ Surrounding lookup failed: {e}")
+    if surrounding:
+        try:
+            nearby_bbls = list(get_surrounding_bbls_from_bbl(
+                bbl=bbl,
+                mode="street",      # or "radius"
+                include_self=True
+            ))
+            print(f"✅ Found {len(nearby_bbls)} surrounding BBLs")
+        except Exception as e:
+            print(f"⚠️ Surrounding lookup failed: {e}")
+            nearby_bbls = [bbl]
+    else:
         nearby_bbls = [bbl]
 
     # --- Step 3: build dataset filters ---
-    bbl_list_str = ",".join(f"'{b}'" for b in nearby_bbls)
     for ds in handler:
+        ds_name = ds.name
+        ds_conf = DATASET_CONFIG.get(ds_name, {})
+        geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+        mode = ds_conf.get("mode", "street")
+
+        where_str = None
+
         try:
-            df = getattr(ds, "df", None)
-            if df is None:
-                df = getattr(ds, "_df_cache", None)
+            if geo_unit == "BBL":
+                bbl_vals = ",".join(f"'{b}'" for b in nearby_bbls)
+                where_str = f"BBL IN ({bbl_vals})"
 
-            if df is not None and hasattr(df, "columns"):
-                df.columns = [c.upper() for c in df.columns]
+            elif geo_unit == "PRECINCT":
+                precinct = get_precinct_from_bbl(bbl)
+                if precinct:
+                    where_str = f"Precinct = '{precinct}'"
 
-            if df is not None and "BBL" in df.columns:
-                bbl_list_str = ",".join(f"'{b}'" for b in nearby_bbls)
-                where_str = f"BBL in ({bbl_list_str})"
-                filters[ds.name] = {"where": where_str, "limit": 1000}
-                print(f"✅ Applying spatial filter on {ds.name}: {len(nearby_bbls)} BBLs")
+            elif geo_unit[:3] == "NTA":
+                nta = get_nta_from_bbl(bbl)
+                if nta:
+                    where_str = f"{geo_unit} = '{nta}'"
+
+            elif geo_unit == "STREETSPAN":
+                span_ids = get_lion_span_from_bbl(bbl)
+                if span_ids:
+                    span_vals = ",".join(f"'{s}'" for s in span_ids)
+                    where_str = f"SegmentID IN ({span_vals})"
+
+            elif geo_unit in ("LONLAT", "COORD"):
+                lon, lat = get_lonlat_from_bbl(bbl)
+                where_str = f"Longitude = {lon} AND Latitude = {lat}"
+
+            elif geo_unit == "BBL_SPLIT":
+                boro_list, block_list, lot_list = [], [], []
+                for full_bbl in nearby_bbls:
+                    try:
+                        s = str(full_bbl)
+                        boro = int(s[0])
+                        block = int(s[1:6])
+                        lot = int(s[6:])
+                        boro_list.append(boro)
+                        block_list.append(block)
+                        lot_list.append(lot)
+                    except Exception:
+                        continue
+
+                if boro_list and block_list and lot_list:
+                    boro_vals = ",".join(map(str, sorted(set(boro_list))))
+                    block_vals = ",".join(map(str, sorted(set(block_list))))
+                    lot_vals = ",".join(map(str, sorted(set(lot_list))))
+                    where_str = (
+                        f"Borough IN ({boro_vals}) "
+                        f"AND Block IN ({block_vals}) "
+                        f"AND Lot IN ({lot_vals})"
+                    )
+                    print(f"✅ Applied split-BBL filter on {ds_name}: {len(block_list)} lots")
+
             else:
-                filters[ds.name] = {"limit": 200}
-                print(f"{ds.name} has no BBL column; using default limit.")
+                print(f"⚠️ Unknown geo_unit '{geo_unit}' for {ds_name}; fallback to preview.")
+
+            # Finalize filter
+            if where_str:
+                filters[ds_name] = {"where": where_str, "limit": 1000}
+                print(f"✅ Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
+            else:
+                filters[ds_name] = {"limit": 200}
+                print(f"⚠️ No valid filter for {ds_name}; using preview mode.")
+
         except NotImplementedError:
-            print(f"⚠️ Skipping dataset '{ds.name}' — API not implemented.")
-            filters[ds.name] = {"limit": 0}
+            print(f"⚠️ Skipping dataset '{ds_name}' — API not implemented.")
+            filters[ds_name] = {"limit": 0}
         except Exception as e:
-            print(f"⚠️ Unexpected error on {ds.name}: {e}")
-            filters[ds.name] = {"limit": 100}
+            print(f"⚠️ Unexpected error on {ds_name}: {e}")
+            filters[ds_name] = {"limit": 100}
 
     return filters
