@@ -7,6 +7,18 @@ GEOCLIENT_API_KEY= os.getenv("GEOCLIENT_API_KEY")
 MAPPLUTO_GDB_PATH = os.getenv("MAPPLUTO_GDB_PATH")
 LION_GDB_PATH = os.getenv("LION_GDB_PATH")
 NTA_PATH = os.getenv("NTA_PATH") # https://data.cityofnewyork.us/resource/9nt8-h7nd.geojson
+CRIME_PATH = os.getenv("CRIME_PATH")
+
+FLATFILE_PATHS = {
+    "Crime": CRIME_PATH,
+    # Add more flatfile dataset paths here
+}
+# For gdb datasets, specify layer names
+FLATFILE_LAYERS = {
+    "Crime": None,  # e.g., "layer_name"
+}
+
+
 
 # STREET_SPAN SETTINGS
 MAX_BUFFER_FT = 120  # Maximum buffer distance in feet
@@ -17,22 +29,105 @@ DEFAULT_BUFFER_FT = 30  # Default buffer distance when street width is unknown
 
 # Human-readable context for each dataset; extend as new sources come online.
 DATASET_DESCRIPTIONS = {
+    "NYC OpenData Zoning and Tax Lot Database": (
+        "Contains zoning and land use classifications for each tax lot, "
+        "used to determine regulatory and development constraints."
+    ),
+    "NYC OpenData PLUTO": (
+        "Provides detailed building and land use data, including lot area, ownership, "
+        "construction year, and zoning attributes at the BBL level."
+    ),
+    "NYC OpenData Automated Traffic Volume Counts": (
+        "Records traffic volume at bridges and major roads, supporting transportation "
+        "and congestion analysis for various locations across the city."
+    ),
+    "NYC OpenData Motor Vehicle Collisions": (
+        "Documents traffic incidents and crash locations, helping identify "
+        "transportation and public safety risk areas."
+    ),
+    "DOB Permits": (
+        "Permits for construction and demolition activities in the City of New York. "
+        "Each record represents the life cycle of one permit for one work type."
+    ),
     "Asbestos Control Program": (
-        "ACP7 form is an asbestos project notification. Any time asbestos abatement is perform on "
-        "quantities greater than a minor project amount, the applicant has to file this form with "
-        "DEP Asbestos Control Program (ACP). All asbestos documents are filed through the Asbestos "
-        "Reporting and Tracking System (ARTS) E-file system. This system is web based and entirely "
-        "paperless. All information on the ACP7 is essential to meet the requirements setforth in "
-        "the asbestos rules and regulations Title15, Chapter 1 (RCNY). ACP enforcement staff utilizes "
-        "this form for inspection of asbestos abatement activities."
+        "Any time asbestos abatement is performed on quantities greater than a minor project amount, "
+        "the applicant has to file this form with DEP Asbestos Control Program (ACP)."
+    ),
+    "Digital City Map Shapefile": (
+        "Represents the official street map of New York City, showing street lines and "
+        "related geographic features, used for accurate base mapping."
+    ),
+    "Historic Districts map": (
+        "Defines the boundaries of designated historic districts throughout NYC, "
+        "as established by the Landmarks Preservation Commission."
+    ),
+    "LION": (
+        "A single-line street base map representing the city’s streets and other linear geographic "
+        "features. Includes address ranges, borough codes, and right-of-way widths."
+    ),
+    "Zoning GIS data": (
+        "Includes zoning districts, special purpose districts, subdistricts, limited height districts, "
+        "commercial overlays, and zoning map amendments for citywide land use analysis."
+    ),
+    "Population by Community Districts": (
+        "Aggregated population counts by community district for decennial census years "
+        "1970 through 2010, used for demographic and spatial trend analysis."
+    ),
+    "Population by Neighborhood Tabulation Area": (
+        "Aggregations of census tracts grouped into Neighborhood Tabulation Areas (NTAs), "
+        "providing demographic information and population change from 2000 to 2010."
+    ),
+    "Crime": (
+        "Provides a statistical breakdown of reported crimes by citywide, borough, and precinct levels, "
+        "used for public safety and social context analysis."
+    ),
+    "Street Construction Permits": (
+        "Lists over 150 types of sidewalk and roadway construction permits issued to utilities, "
+        "contractors, agencies, and homeowners for work on public streets."
+    ),
+    "MTA subway and other underground train lines": (
+        "Contains spatial data for all NYC subway and Staten Island Railway stations and lines, "
+        "used for accessibility and transportation network analysis."
+    ),
+    "City Owned and Leased Property": (
+        "Identifies city-owned and leased properties, including location, agency, and use type, "
+        "supporting land management and zoning analysis."
+    ),
+    "Sewer System Data": (
+        "Represents the city’s stormwater and sewer infrastructure network, including "
+        "MS4 outfalls, drainage areas, and connections to wastewater treatment facilities."
+    ),
+    "Clean Air Tracking System (CATS)": (
+        "An online platform managed by the NYC Department of Environmental Protection "
+        "that supports air quality–related registrations and permits for boilers, generators, "
+        "gas stations, and industrial facilities."
+    ),
+    "Water and Sewer Permits": (
+        "Contains information about applications approved and permits issued for water "
+        "and sewer connections across the city."
+    ),
+    "DOB NOW: Build - Job Application Findings": (
+        "Part of the DOB NOW online system that records job filings and applications "
+        "for construction and alteration projects, excluding electrical and elevator work."
     ),
     "Citywide Catch Basins": (
-        "NYCDEP Citywide Catch Basins. "
-        "Catch basins are an important part of New York City’s 7,500-mile sewer network. "
-        "They are connected to underground pipes that channel stormwater from the street "
-        "to one of DEP’s 14 wastewater resource recovery facilities, or directly into our "
-        "surrounding waterbodies. DEP cleans and maintains over 150,000 catch basins citywide."
-    )
+        "NYCDEP Citywide Catch Basins. Catch basins are an important part of New York City’s "
+        "7,500-mile sewer network. They collect stormwater and direct it to wastewater "
+        "treatment facilities or nearby waterbodies. DEP maintains over 150,000 basins citywide."
+    ),
+    "Parks Monuments": (
+        "Catalog of monuments maintained by NYC Parks, detailing their locations and associated "
+        "boroughs for cultural and heritage mapping."
+    ),
+    "Citywide Hydrants": (
+        "Lists all fire hydrant locations across NYC, used for public safety, emergency response, "
+        "and infrastructure analysis."
+    ),
+    "Street Pavement Rating": (
+        "The Citywide Catch Basins dataset maps over 150,000 catch basins that collect stormwater "
+        "and direct it into NYC’s sewer network or nearby waterbodies, supporting drainage "
+        "and flood management."
+    ),
 }
 
 # Lightweight topical tags that downstream UIs can group/filter on.
@@ -49,9 +144,34 @@ DEFAULT_DATASET_FLAGS = dict(
 
 # Socrata dataset identifiers (4-4 codes) when available.
 DATASET_API_IDS = {
-    "Asbestos Control Program": "vq35-j9qm",
-    "Clean Air Tracking System (CATS)": "f4rp-2kvy",
+    "NYC OpenData Zoning and Tax Lot Database" : "fdkv-4t4z",
+    "NYC OpenData PLUTO" : "64uk-42ks",
+    "NYC OpenData Automated Traffic Volume Counts" : "7ym2-wayt",
+    "NYC OpenData Motor Vehicle Collisions" : "h9gi-nx95",
+    "DOB Permits" : "ipu4-2q9a",
+    "Asbestos Control Program" : "vq35-j9qm",
+    "Digital City Map Shapefile" : "y23c-72fa",
+    "Historic Districts map" : "skyk-mpzq",
+    "LION" : None,
+    "Zoning GIS data" : None,
+    "Population by Community Districts" : "xi7c-iiu2",
+    "Population by Neighborhood Tabulation Area" : "swpk-hqdp",
+    "Crime" : None,
+    "Street Construction Permits" : "tqtj-sjs8",
+    "MTA subway and other underground train lines" : "39hk-dx4f",
+    "City Owned and Leased Property" : "fn4k-qyk2",
+    "Sewer System Data" : None,
+    "Clean Air Tracking System (CATS)" : "f4rp-2kvy",
+    "Water and Sewer Permits" : "hphy-6g7m",
+    "DOB NOW: Build - Job Application Findings" : "w9ak-ipjd",
+    "Citywide Catch Basins" : "2w2g-fk3i",
+    "Parks Monuments" : "6rrm-vxj9",
+    "Citywide Hydrants" : "5bgh-vtsn",
+    "Street Pavement Rating" : "6yyb-pb25"
 }
+
+
+
 
 # Canonical mapping from risk categories to the datasets that provide answers.
 cat_to_ds = {
@@ -76,7 +196,6 @@ cat_to_ds = {
         "Street Construction Permits",
         "DOB permits",
         "City Owned and Leased Property",
-        "DOB Job filings",
         "Water and Sewer Permits",
         "DOB NOW: Build - Job Application Findings",
     ],
@@ -122,6 +241,11 @@ _BOROUGH_ALIASES = {
 # Main categories and all datasets
 MAIN_CATS = list(cat_to_ds.keys())
 ALL_DATASETS = sorted({name for names in cat_to_ds.values() for name in names})
+
+#Dataset Geo Config
+DATASET_CONFIG = {
+    "Asbestos Control Program": {"geo_field": "BBL"},
+}
 
 def check_env():
     missing = [k for k, v in globals().items() if k.isupper() and v is None]

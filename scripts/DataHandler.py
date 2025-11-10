@@ -35,6 +35,33 @@ for category, dataset_names in cat_to_ds.items():
 # Core dataset structures
 # -----------------------------
 
+def load_flatfile_dataset(name: str, path: str, layer: str = None, **kwargs):
+    """
+    General loader for flatfile datasets. Supports gdb, shp, csv, excel, pkl, parquet, etc.
+    Returns a pandas or geopandas DataFrame.
+    """
+    ext = os.path.splitext(path)[-1].lower()
+    if ext in [".csv"]:
+        return pd.read_csv(path, **kwargs)
+    elif ext in [".xlsx", ".xls"]:
+        return pd.read_excel(path, **kwargs)
+    elif ext in [".pkl"]:
+        return pd.read_pickle(path, **kwargs)
+    elif ext in [".parquet"]:
+        return pd.read_parquet(path, **kwargs)
+    elif ext in [".shp"]:
+        return gpd.read_file(path, **kwargs)
+    elif ext in [".gdb"]:
+        # specify a layer name
+        layers = gpd.io.file.fiona.listlayers(path)
+        use_layer = layer or (layers[0] if layers else None)
+        if use_layer:
+            return gpd.read_file(path, layer=use_layer, **kwargs)
+        else:
+            raise ValueError(f"No layers found in GDB: {path}")
+    else:
+        raise NotImplementedError(f"Unsupported flatfile format: {ext} for dataset '{name}'")
+
 @dataclass(frozen=True)
 class DataSet:
     name: str
@@ -67,6 +94,19 @@ class DataSet:
     def fetch_data_frame(self, where=None, limit=None) -> pd.DataFrame:
         """Fetch a pandas DataFrame for this dataset using its configured source, with optional filtering."""
         api_id = DATASET_API_IDS.get(self.name)
+        if api_id is None:
+            path = settings.FLATFILE_PATHS.get(self.name)
+            layer = settings.FLATFILE_LAYERS.get(self.name)
+            if not path:
+                raise FileNotFoundError(f"No path configured for flatfile dataset '{self.name}'")
+            df = load_flatfile_dataset(self.name, path, layer=layer)
+            # apply filtering if 'where' or 'limit' is provided
+            if where:
+                # simple pandas query
+                df = df.query(where)
+            if limit is not None:
+                df = df.head(limit)
+            return df
         if not api_id:
             raise NotImplementedError(f"No API mapping configured for dataset '{self.name}'")
 
@@ -92,8 +132,17 @@ class DataSet:
         return self.df
 
     def df_filtered(self, where=None, limit=None) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
-        """Return a DataFrame with optional filtering."""
-        return self.fetch_data_frame(where=where, limit=limit)
+        """Return a DataFrame with optional filtering. Returns empty DataFrame if any error occurs."""
+        try:
+            return self.fetch_data_frame(where=where, limit=limit)
+        except Exception as e:
+            # Try to infer type: if it's a flatfile and expected to be geodata, return empty GeoDataFrame
+            print("Error fetching DataFrame:", str(e))
+            api_id = DATASET_API_IDS.get(self.name)
+            path = settings.FLATFILE_PATHS.get(self.name)
+            if api_id is None and path and os.path.splitext(path)[-1].lower() in [".shp", ".gdb"]:
+                return gpd.GeoDataFrame()
+            return pd.DataFrame()
 
 def _build_dataset(name: str) -> DataSet:
     """Create a DataSet object from metadata tables, preserving flags & tags."""
