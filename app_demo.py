@@ -3,7 +3,7 @@ Demo script for using Geoclient API helper functions.
 Run with:  python -m app_demo
 """
 
-from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
+from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin, get_bbl_from_intersection
 from scripts.GeoBundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
 from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon

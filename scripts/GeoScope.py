@@ -3,11 +3,42 @@ GeoScope stub: returns a filter dict for each dataset.
 Replace logic here to generate spatial filters based on addresses and handler.datasets.
 """
 from __future__ import annotations
-from typing import Dict, Any, List
-
-from api.GeoClient import get_bbl_from_address
+from typing import Dict, Any, List, Optional
+from itertools import combinations
+from api.GeoClient import get_bbl_from_address, get_bbl_from_intersection
 from adapters.surrounding import get_surrounding_bbls_from_bbl
 
+
+def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
+    house = (record.get("house_number") or "").strip()
+    street = (record.get("street_name") or "").strip()
+    borough = (record.get("borough") or "").strip()
+
+    if not street or not borough:
+        print(f"⚠️ No proper address for {normalized} ({borough}): {exc}")
+        return None
+
+    normalized = street.replace(" and ", " & ").replace(" AND ", " & ")
+
+    if "&" in normalized:
+        try:
+            street_one, street_two = [s.strip() for s in normalized.split("&", 1)]
+            bbl_intersection = get_bbl_from_intersection(street_one, street_two, borough)
+            print(f"✅ Geoclient intersection lookup: {street_one} & {street_two}, {borough} → BBL {bbl_intersection}")
+            return bbl_intersection
+        except Exception as exc:
+            print(f"⚠️ Intersection lookup failed for {normalized} ({borough}): {exc}")
+            return None
+
+    if house:
+        try:
+            bbl_address = get_bbl_from_address(f"{house} {street}", borough)
+            print(f"✅ Geoclient lookup: {house} {street}, {borough} → BBL {bbl_address}")
+            return bbl_address
+        except Exception as exc:
+            print(f"⚠️ Address lookup failed for {house} {street} ({borough}): {exc}")
+
+    return None
 
 def get_dataset_filters(addresses: List[Dict[str, Any]], handler) -> Dict[str, Dict[str, Any]]:
     filters: Dict[str, Dict[str, Any]] = {}
@@ -18,42 +49,38 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler) -> Dict[str, D
             filters[ds.name] = {"limit": 200}
         return filters
 
-    # --- Step 1: resolve address → BBL ---
-    first = addresses[0]
-    house = first.get("house_number")
-    street = first.get("street_name")
-    borough = first.get("borough")
+    # --- Step 1: resolve each address → BBL ---
+    resolved_bbls: List[str] = []
+    for record in addresses:
+        bbl = _resolve_single_bbl(record)
+        if bbl:
+            resolved_bbls.append(bbl)
 
-    if not (house and street and borough):
-        print("⚠️ Incomplete address info; skipping geoclient lookup.")
+    resolved_bbls = list(dict.fromkeys(bbl for bbl in resolved_bbls if bbl))
+
+    if not resolved_bbls:
+        print("⚠️ No BBLs resolved from provided addresses; using preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
         return filters
 
-    try:
-        bbl = get_bbl_from_address(f"{house} {street}", borough)
-        print(f"✅ Geoclient lookup: {house} {street}, {borough} → BBL {bbl}")
-    except Exception as e:
-        print(f"⚠️ Geoclient lookup failed: {e}")
-        bbl = None
+    # --- Step 2: find surrounding BBLs for each resolved BBL ---
+    nearby_set = set()
+    for bbl in resolved_bbls:
+        try:
+            results = get_surrounding_bbls_from_bbl(
+                bbl=bbl,
+                mode="street",
+                include_self=True,
+            )
+            for item in results:
+                nearby_set.add(item)
+        except Exception as exc:
+            print(f"⚠️ Surrounding lookup failed for {bbl}: {exc}")
+            nearby_set.add(bbl)
 
-    if not bbl:
-        print("⚠️ No BBL found; fallback to preview.")
-        for ds in handler:
-            filters[ds.name] = {"limit": 200}
-        return filters
-
-    # --- Step 2: find surrounding BBLs ---
-    try:
-        nearby_bbls = list(get_surrounding_bbls_from_bbl(
-            bbl=bbl,
-            mode="street",      # or "radius"
-            include_self=True
-        ))
-        print(f"✅ Found {len(nearby_bbls)} surrounding BBLs")
-    except Exception as e:
-        print(f"⚠️ Surrounding lookup failed: {e}")
-        nearby_bbls = [bbl]
+    nearby_bbls = sorted(nearby_set)
+    print(f"✅ Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
 
     # --- Step 3: build dataset filters ---
     bbl_list_str = ",".join(f"'{b}'" for b in nearby_bbls)
