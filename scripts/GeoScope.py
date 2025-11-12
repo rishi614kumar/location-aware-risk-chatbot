@@ -13,6 +13,39 @@ from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl
 from config.settings import DATASET_CONFIG
 
+def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
+    """
+    Given a list of nearby BBLs, convert all to the specified geo_unit and
+    deduplicate results.
+    """
+    units = set()
+
+    for b in bbl_list:
+        try:
+            if geo_unit == "PRECINCT":
+                val = get_precinct_from_bbl(b)
+            elif geo_unit.startswith("NTA"):
+                val = get_nta_from_bbl(b)
+            elif geo_unit == "STREETSPAN":
+                vals = get_lion_span_from_bbl(b)
+                if vals:
+                    units.update(vals)
+                continue
+            elif geo_unit in ("LONLAT", "COORD"):
+                lon, lat = get_lonlat_from_bbl(b)
+                val = f"{lon},{lat}"
+            elif geo_unit == "BBL":
+                val = b
+            else:
+                val = None
+
+            if val:
+                units.add(val)
+        except Exception as e:
+            print(f"⚠️ Surrounding conversion failed for {b} ({geo_unit}): {e}")
+            continue
+
+    return list(units)
 
 def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=True) -> Dict[str, Dict[str, Any]]:
     filters: Dict[str, Dict[str, Any]] = {}
@@ -69,42 +102,46 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
         ds_conf = DATASET_CONFIG.get(ds_name, {})
         geo_unit = ds_conf.get("geo_unit", "BBL").upper()
         mode = ds_conf.get("mode", "street")
+        want_surrounding = ds_conf.get("surrounding", False)
 
         where_str = None
 
         try:
+            if not want_surrounding:
+                bbls_to_use = [bbl]
+            else:
+                bbls_to_use = nearby_bbls
+
+            filter_ids = get_surrounding_units(bbls_to_use, geo_unit)
             if geo_unit == "BBL":
-                bbl_vals = ",".join(f"'{b}'" for b in nearby_bbls)
-                where_str = f"BBL IN ({bbl_vals})"
+                vals = ",".join(f"'{b}'" for b in filter_ids)
+                where_str = f"BBL IN ({vals})"
 
             elif geo_unit == "PRECINCT":
-                precinct = get_precinct_from_bbl(bbl)
-                if precinct:
-                    where_str = f"Precinct = '{precinct}'"
+                vals = ",".join(f"'{p}'" for p in filter_ids)
+                where_str = f"Precinct IN ({vals})"
 
-            elif geo_unit[:3] == "NTA":
-                nta = get_nta_from_bbl(bbl)
-                if nta:
-                    where_str = f"{geo_unit} = '{nta}'"
+            elif geo_unit.startswith("NTA"):
+                vals = ",".join(f"'{n}'" for n in filter_ids)
+                where_str = f"NTA IN ({vals})"
 
             elif geo_unit == "STREETSPAN":
-                span_ids = get_lion_span_from_bbl(bbl)
-                if span_ids:
-                    span_vals = ",".join(f"'{s}'" for s in span_ids)
-                    where_str = f"SegmentID IN ({span_vals})"
+                vals = ",".join(f"'{s}'" for s in filter_ids)
+                where_str = f"SegmentID IN ({vals})"
 
             elif geo_unit in ("LONLAT", "COORD"):
-                lon, lat = get_lonlat_from_bbl(bbl)
-                where_str = f"Longitude = {lon} AND Latitude = {lat}"
+                coords = [lonlat.split(',') for lonlat in filter_ids]
+                conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
+                where_str = conds
 
             elif geo_unit == "BBL_SPLIT":
                 boro_list, block_list, lot_list = [], [], []
                 for full_bbl in nearby_bbls:
                     try:
                         s = str(full_bbl)
-                        boro = int(s[0])
-                        block = int(s[1:6])
-                        lot = int(s[6:])
+                        boro = s[0]
+                        block = s[1:6]
+                        lot = s[6:]
                         boro_list.append(boro)
                         block_list.append(block)
                         lot_list.append(lot)
@@ -112,9 +149,9 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
                         continue
 
                 if boro_list and block_list and lot_list:
-                    boro_vals = ",".join(map(str, sorted(set(boro_list))))
-                    block_vals = ",".join(map(str, sorted(set(block_list))))
-                    lot_vals = ",".join(map(str, sorted(set(lot_list))))
+                    boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
+                    block_vals = ",".join(f"'{b}'" for b in sorted(set(block_list)))
+                    lot_vals = ",".join(f"'{b}'" for b in sorted(set(lot_list)))
                     where_str = (
                         f"Borough IN ({boro_vals}) "
                         f"AND Block IN ({block_vals}) "

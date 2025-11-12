@@ -11,11 +11,13 @@ CRIME_PATH = os.getenv("CRIME_PATH")
 
 FLATFILE_PATHS = {
     "Crime": CRIME_PATH,
+    "Sewer System Data": os.getenv("SEWER_SYSTEM_DATA_PATH"),
     # Add more flatfile dataset paths here
 }
 # For gdb datasets, specify layer names
 FLATFILE_LAYERS = {
     "Crime": None,  # e.g., "layer_name"
+    "Sewer System Data": "MS4DRAINAGEAREAS"
 }
 
 
@@ -244,12 +246,12 @@ ALL_DATASETS = sorted({name for names in cat_to_ds.values() for name in names})
 
 #Dataset Geo Config
 DATASET_CONFIG = {
-    "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street"},
-    "Crime": {"geo_unit": "PRECINCT", "mode": "street"},
-    "Sewer System Data": {"geo_unit": "LONLAT", "mode": "radius"},
-    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius"},
-    "Population by Community Districts": {"geo_unit": None, "mode": "street"},
-    "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street"},
+    "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street", "surrounding":True},
+    "Crime": {"geo_unit": "PRECINCT", "mode": "street","surrounding":False},
+    "Sewer System Data": {"geo_unit": "", "mode": "radius","surrounding":False},
+    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius","surrounding":True},
+    "Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
+    "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
     # Add more dataset configurations as needed
 }
 
