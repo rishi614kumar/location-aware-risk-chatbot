@@ -157,7 +157,7 @@ DATASET_API_IDS = {
     "LION" : None,
     "Zoning GIS data" : None,
     "Population by Community Districts" : "xi7c-iiu2",
-    "Population by Neighborhood Tabulation Area" : "swpk-hqdp",
+    "Population by Neighborhood Tabulation Area" : "9nt8-h7nd",
     "Crime" : None,
     "Street Construction Permits" : "tqtj-sjs8",
     "MTA subway and other underground train lines" : "39hk-dx4f",
