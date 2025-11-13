@@ -114,8 +114,8 @@ class AzureOpenAIBackend(ChatBackend):
         # --- Other settings ---
         self._generation_config = generation_config or {
             "max_tokens": 500,
-            "temperature": 0.7,
-            "top_p": 0.3
+            "temperature": 0.1,
+            "top_p": 1.0
         }
         self._chat_history: List[Dict[str, Any]] = []
         self._system_instruction: Optional[str] = None
@@ -181,7 +181,7 @@ def make_backend(provider: Optional[str] = None,
     model_name: overrides provider default
     Also reads env: LLM_PROVIDER, LLM_MODEL
     """
-    p = (provider or os.getenv("LLM_PROVIDER") or "gemini").lower()
+    p = (provider or os.getenv("LLM_PROVIDER") or "openai").lower()
     deployment = deployment or os.getenv("AZURE_OPENAI_DEPLOYMENT", "testdelaycategory")
     endpoint = endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
     api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_GPT_35_TURBO_API_KEY")

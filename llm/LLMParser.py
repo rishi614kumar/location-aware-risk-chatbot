@@ -67,7 +67,7 @@ class BackendChatModel:
 
         self._api_key = (
             self._backend_kwargs.get("api_key")
-            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("AZURE_OPENAI_API_KEY")
         )
         if self._api_key and "api_key" not in self._backend_kwargs:
             self._backend_kwargs["api_key"] = self._api_key
