@@ -112,42 +112,8 @@ class BackendChatModel:
 # 1) LLM CATEGORY CLASSIFIER
 # -----------------------------
 
-SYS_MULTI = f"""Classify the user's question into one or more of these categories:
-- Environmental & Health Risks
-- Zoning & Land Use
-- Construction & Permitting
-- Transportation & Traffic
-- Public Safety & Social Context
-- Comparative Site Queries
-
-Return STRICT JSON only:
-{{"categories": ["<labels>"], "datasets": ["<dataset names>"], "confidence": <0..1>}}
-
-Rules:
-- Traffic, collisions, congestion, road closures, counts, speeds, hotspots -> Transportation & Traffic
-- DOB permits, job filings, street construction, water/sewer permits -> Construction & Permitting
-- Zoning, land use, city-owned property, districts -> Zoning & Land Use
-- Flood/air/health exposure, sewer systems, population health -> Environmental & Health Risks
-- Crime, safety, hydrants, social context -> Public Safety & Social Context
-- Comparing between two sites (more/less, better/worse, higher/lower) -> include Comparative Site Queries plus other relevant labels
-- "datasets" should list the most relevant NYC datasets (typically 2-5) chosen from: {", ".join(ALL_DATASETS)}.
-- Prefer datasets whose categories overlap the predicted categories; only add others when clearly justified by the question.
-""".strip()
-
-FEWSHOTS_MULTI: List[Tuple[str, dict]] = [
-    ("Where are the top traffic accident hotspots within 500 feet of 163rd Street?",
-     {"categories": ["Transportation & Traffic"], "datasets": ["NYC OpenData Motor Vehicle Collisions", "NYC OpenData Automated Traffic Volume Counts"], "confidence": 0.85, "borough": "Bronx"}),
-    ("Any active DOB permits near 10 Jay St?",
-     {"categories": ["Construction & Permitting"], "datasets": ["DOB permits", "Street Construction Permits"], "confidence": 0.85, "borough": "Brooklyn"}),
-    ("Is this parcel in a historic district and what’s the zoning?",
-     {"categories": ["Zoning & Land Use"], "datasets": ["Historic Districts map", "NYC OpenData Zoning and Tax Lot Database"], "confidence": 0.80, "borough": "Manhattan"}),
-    ("Any flood or sewer risk around 123 Main St?",
-     {"categories": ["Environmental & Health Risks"], "datasets": ["Sewer System Data", "Clean Air Tracking System (CATS)"], "confidence": 0.80, "borough": "Queens"}),
-    ("Where are the nearest fire hydrants near Borough Hall?",
-     {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants", "NYC OpenData Motor Vehicle Collisions"], "confidence": 0.75, "borough": "Brooklyn"}),
-    ("Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
-     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data", "NYC OpenData PLUTO"], "confidence": 0.88, "borough": "Manhattan"}),
-]
+SYS_MULTI = settings.SYS_MULTI
+FEWSHOTS_MULTI = settings.FEWSHOTS_MULTI
 
 def _build_user_prompt_multi(query: str) -> str:
     """
@@ -172,78 +138,9 @@ def _build_user_prompt_multi(query: str) -> str:
 # 2) ADDRESS/POI EXTRACTION
 # -----------------------------
 
-SYS_ADDR = """Extract all location mentions from the user's query.
-Return STRICT JSON only: {"addresses":[{"house_number":"","street_name":"","borough":"","raw":"","notes":""}, ...]}
-Rules:
-- Include numbered street addresses (e.g., "10 Jay St", "123 Main Street")
-- For intersections output a single object with "street_name" formatted "Street A & Street B"
-- Include named places/POIs/landmarks/neighborhoods when used as locators, even without qualifiers
-  (e.g., "Times Square", "Union Square Park", "Columbia University", "Penn Station")
-- If the query says "near X", include X
-- Do NOT include cities/states/countries unless explicitly mentioned
-- Preserve original wording/casing in the "raw" field; trim whitespace elsewhere
-- Deduplicate while preserving order
-Field guidance:
-- house_number: leading digits for numbered addresses; leave empty string if none
-- street_name: primary street/highway name or POI/intersection label
-- borough: Choose from Queens, Manhattan, Bronx, Staten Island, Brooklyn when determinable; otherwise empty
-- notes: optional clarifications (e.g., neighborhood). Use empty string when not needed
-""".strip()
+SYS_ADDR = settings.SYS_ADDR
+FEWSHOTS_ADDR = settings.FEWSHOTS_ADDR
 
-FEWSHOTS_ADDR: List[Tuple[str, dict]] = [
-    (
-        "Any active DOB permits near 10 Jay St?",
-        {
-            "addresses": [
-                {"house_number": "10", "street_name": "Jay St", "borough": "Brooklyn", "raw": "10 Jay St", "notes": ""}
-            ]
-        },
-    ),
-    (
-        "Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
-        {
-            "addresses": [
-                {"house_number": "", "street_name": "149th Street & Grand Concourse", "borough": "Bronx", "raw": "149th Street & Grand Concourse", "notes": ""},
-                {"house_number": "", "street_name": "181st Street & St. Nicholas Avenue", "borough": "Manhattan", "raw": "181st Street & St. Nicholas Avenue", "notes": ""},
-            ]
-        },
-    ),
-    (
-        "Traffic hotspots near Borough Hall and 123 Main St",
-        {
-            "addresses": [
-                {"house_number": "", "street_name": "Borough Hall", "borough": "Brooklyn", "raw": "Borough Hall", "notes": ""},
-                {"house_number": "123", "street_name": "Main St", "borough": "", "raw": "123 Main St", "notes": ""},
-            ]
-        },
-    ),
-    (
-        "What types of NYPD complaints are most common near Times Square?",
-        {
-            "addresses": [
-                {"house_number": "", "street_name": "Times Square", "borough": "Manhattan", "raw": "Times Square", "notes": ""}
-            ]
-        },
-    ),
-    (
-        "Collisions around Union Square Park and Penn Station",
-        {
-            "addresses": [
-                {"house_number": "", "street_name": "Union Square Park", "borough": "Manhattan", "raw": "Union Square Park", "notes": ""},
-                {"house_number": "", "street_name": "Penn Station", "borough": "Manhattan", "raw": "Penn Station", "notes": ""},
-            ]
-        },
-    ),
-    (
-        "Incidents by Columbia University and Central Park West",
-        {
-            "addresses": [
-                {"house_number": "", "street_name": "Columbia University", "borough": "Manhattan", "raw": "Columbia University", "notes": ""},
-                {"house_number": "", "street_name": "Central Park West", "borough": "Manhattan", "raw": "Central Park West", "notes": ""},
-            ]
-        },
-    ),
-]
 
 def _build_user_prompt_addr(query: str) -> str:
     """
@@ -447,8 +344,10 @@ class LLMParser:
                 temperature=0.0,
                 response_format="json",
             )
+            print("✅ Classifier LLM call succeeded")
             data = json.loads(raw)
-        except Exception:
+        except Exception as exc:
+            print(f"⚠️ Classifier LLM call failed: {exc}")
             fallback_borough = self._infer_borough_from_query(query)
             return (["Other"], [], 0.5, fallback_borough)  # fall back gracefully when the LLM fails
 
@@ -497,11 +396,14 @@ class LLMParser:
                     temperature=temp,
                     response_format="json",
                 )
+                print(f"✅ Address LLM call succeeded (temperature={temp})")
                 out = _safe_parse_addr_json(raw)
                 if out:
                     return out
-            except Exception:
+            except Exception as exc:
+                print(f"⚠️ Address LLM call failed (temperature={temp}): {exc}")
                 continue  # keep trying with the next temperature or drop to regex fallback
+        print("⚠️ Falling back to regex-based address extraction")
         return _regex_place_fallback(query)
 
     def route_query_to_datasets(self, query: str) -> Dict[str, object]:

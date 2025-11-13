@@ -4,6 +4,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import Dict, Any, Optional
 from config.settings import GEOCLIENT_API_KEY  
+from adapters.coords import get_bbl_from_lonlat
 
 BASE_URL = "https://api.nyc.gov/geoclient/v2"
 
@@ -162,6 +163,19 @@ class Geoclient:
         house = parts[0]
         street = parts[1] if len(parts) > 1 else ""
         return self.address(house, street, borough, timeout=timeout)
+    
+    def intersection(self, cross_street_one: str, cross_street_two: str, borough: str, *, timeout: float = 10.0,) -> Dict[str, Any]:
+        url = f"{self.base_url}/intersection.json"
+        params = {
+            "crossStreetOne": cross_street_one,
+            "crossStreetTwo": cross_street_two,
+            "borough": borough,
+        }
+        r = self.session.get(url, params=params, timeout=timeout)
+        r.raise_for_status()
+        data = r.json()
+        section = data.get("intersection") or {}
+        return _normalize(section)
 
     # BBL -> everything
     def bbl(self, bbl: str, *, timeout: float = 10.0) -> Dict[str, Any]:
@@ -176,6 +190,8 @@ class Geoclient:
         data = r.json()
         section = data.get("bbl") or {}
         return _normalize(section)
+    
+
 
 
 _client: Optional[Geoclient] = None
@@ -190,4 +206,9 @@ def get_bbl_from_address(address: str, borough: str) -> Optional[str]:
     info = _get_client().address_string(address, borough)
     return info.get("bbl")
 
+def get_bbl_from_intersection(street_one: str, street_two: str, borough: str) -> Optional[str]:
+    # Intersection function doesn't return bbl, but it returns longitude and latitude
+    info = _get_client().intersection(street_one, street_two, borough)
+    bbl = str(int(get_bbl_from_lonlat(info['longitude'], info['latitude'])[0]))
+    return bbl
 
