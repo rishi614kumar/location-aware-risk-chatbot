@@ -3,16 +3,16 @@ Demo script for using Geoclient API helper functions.
 Run with:  python -m app_demo
 """
 
-from api.geoclient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin
-from scripts.geobundle import geo_from_address
+from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_address, get_bin_from_address,get_bins_from_bbl, get_bbl_from_bin, get_bbl_from_intersection
+from scripts.GeoBundle import geo_from_address
 from adapters.precinct import get_precinct_from_bbl, get_bbls_from_precinct # Rishi
 from adapters.nta import get_nta_from_bbl, get_bbls_from_nta  # Sharon
 from adapters.street_span import get_bbls_from_lion_span, get_lion_span_from_bbl  # Kevin
 from adapters.epsg import get_lonlat_to_stateplane, get_stateplane_to_lonlat  # Max
 from adapters.coords import get_bbl_from_lonlat, get_bbls_near_lonlat, get_lonlat_from_bbl  # Louis
-from llm.DataHandler import DataHandler
-from llm.LLM_parser import get_default_parser
-from llm.LLM_interface import make_backend
+from scripts.DataHandler import DataHandler
+from llm.LLMParser import get_default_parser
+from llm.LLMInterface import make_backend
 from IPython.display import display
 import json
 # Initialize the client
@@ -43,12 +43,6 @@ try:
     print("OK.")
 except Exception as e:
     print("expected error:", e)
-
-
-from api.geoclient import (
-    get_bins_from_address, get_bin_from_address,
-    get_bins_from_bbl, get_bbl_from_bin
-)
 
 # Address -> one BIN
 print("\n------------------------Example 4: Address to one BIN------------------------")
@@ -180,6 +174,7 @@ if second_dataset:
     print("Description:", second_dataset.description, '\n')
     print(second_dataset.df.shape)
     display(second_dataset.df.head())
+
 
 print("\n------------------------ Example 2: Comparative Site Queries ------------------------")
 example_query = 'Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?”'

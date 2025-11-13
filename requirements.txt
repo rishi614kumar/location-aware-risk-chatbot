@@ -7,3 +7,5 @@ pytest
 google-generativeai
 python-dotenv
 sodapy
+tabulate
+xlrd>=2.0.1
