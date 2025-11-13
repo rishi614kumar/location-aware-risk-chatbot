@@ -53,6 +53,14 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
     """
     units = set()
 
+
+def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
+    """
+    Given a list of nearby BBLs, convert all to the specified geo_unit and
+    deduplicate results.
+    """
+    units = set()
+
     for b in bbl_list:
         try:
             if geo_unit == "PRECINCT":
@@ -122,6 +130,16 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
         
         nearby_bbls = sorted(nearby_set)
         print(f"✅ Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
+        try:
+            nearby_bbls = list(get_surrounding_bbls_from_bbl(
+                bbl=bbl,
+                mode="street",      # or "radius"
+                include_self=True
+            ))
+            print(f"✅ Found {len(nearby_bbls)} surrounding BBLs")
+        except Exception as e:
+            print(f"⚠️ Surrounding lookup failed: {e}")
+            nearby_bbls = [bbl]
     else:
         nearby_bbls = [bbl]
 
