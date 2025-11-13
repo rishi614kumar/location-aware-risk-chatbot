@@ -8,6 +8,16 @@ from adapters.coords import get_bbl_from_lonlat
 
 BASE_URL = "https://api.nyc.gov/geoclient/v2"
 
+class GeoclientException(Exception):
+    """Raised when the NYC Geoclient API returns an error or unexpected payload."""
+    def __init__(self, message: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        self.payload = payload or {}
+        super().__init__(message)
+        
+def _log_warning(message: str) -> None:
+    print(f"⚠️ GeoclientException: {message}")
+
+
 def _build_session() -> requests.Session:
     sess = requests.Session()
     retry = Retry(
@@ -130,6 +140,7 @@ def get_bbl_from_bin(bin_: str) -> Optional[str]:
 
     # 3) No luck
     return None
+
 class Geoclient:
     def __init__(self, api_key: Optional[str] = None, base_url: str = BASE_URL):
         self.base_url = base_url
@@ -173,6 +184,10 @@ class Geoclient:
         }
         r = self.session.get(url, params=params, timeout=timeout)
         r.raise_for_status()
+
+        if not (cross_street_one and cross_street_two and borough):
+            raise GeoclientException("cross_street_one, cross_street_two, and borough are required for intersection lookups")
+        
         data = r.json()
         section = data.get("intersection") or {}
         return _normalize(section)
@@ -190,9 +205,6 @@ class Geoclient:
         data = r.json()
         section = data.get("bbl") or {}
         return _normalize(section)
-    
-
-
 
 _client: Optional[Geoclient] = None
 
@@ -203,12 +215,32 @@ def _get_client() -> Geoclient:
     return _client
 
 def get_bbl_from_address(address: str, borough: str) -> Optional[str]:
-    info = _get_client().address_string(address, borough)
+    try:
+        info = _get_client().address_string(address, borough)
+    except GeoclientException as exc:
+        _log_warning(f"Address lookup failed for {address}, {borough}: {exc}")
+        return None
     return info.get("bbl")
 
 def get_bbl_from_intersection(street_one: str, street_two: str, borough: str) -> Optional[str]:
     # Intersection function doesn't return bbl, but it returns longitude and latitude
-    info = _get_client().intersection(street_one, street_two, borough)
-    bbl = str(int(get_bbl_from_lonlat(info['longitude'], info['latitude'])[0]))
-    return bbl
+    try:
+        info = _get_client().intersection(street_one, street_two, borough)
+    except GeoclientException as exc:
+        _log_warning(f"Intersection lookup failed for {street_one} & {street_two}, {borough}: {exc}")
+        return None
+    
+    lon = info.get("longitude")
+    lat = info.get("latitude")
+    if lon is None or lat is None:
+        _log_warning(f"Intersection response missing coordinates for {street_one} & {street_two}, {borough}")
+        return None
+    try:
+        bbl_tuple = get_bbl_from_lonlat(lon, lat)
+        if not bbl_tuple:
+            raise Exception("No BBL returned from lon/lat lookup")
+        return str(int(bbl_tuple[0]))
+    except GeoclientException as exc:
+        _log_warning(f"Coordinate-to-BBL lookup failed for {street_one} & {street_two}, {borough}: {exc}")
+        return None
 

@@ -53,14 +53,6 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
     """
     units = set()
 
-
-def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
-    """
-    Given a list of nearby BBLs, convert all to the specified geo_unit and
-    deduplicate results.
-    """
-    units = set()
-
     for b in bbl_list:
         try:
             if geo_unit == "PRECINCT":
