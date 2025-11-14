@@ -1,5 +1,6 @@
 # scripts/RiskSummarizer.py
 from llm.LLMInterface import Chat, make_backend
+from config.logger import logger
 
 def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat = None) -> str:
     """
@@ -36,25 +37,25 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
     if data_handler:
         for ds in data_handler:
             prompt += (f"""
-                Extracted data for dataset:{ds.name}:\n
-                Which has the following description: {ds.description}\n
+                Extracted data for dataset:{ds.name}:
+                Which has the following description: {ds.description}
                 Extracted rows: \n \n
                 {ds.df.head(100).to_markdown(index=False)} \n \n
             """)
-            print("length of extracted rows: ", len(ds.df))
+            logger.info(f"length of extracted rows for {ds.name}: {len(ds.df)}")
     prompt += (f"""
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
     # print("Prompt for risk summarization: \n", prompt)
     if llm_chat:
         response = llm_chat.ask(prompt)
-        print("Response from risk summarization: \n", response)
+        logger.info(f"Response from risk summarization: {response}")
         return response
     else:
         chat = Chat(make_backend(provider="gemini"))
         chat.start()
         response = chat.ask(prompt)
         chat.reset()
-        print("Response from risk summarization: \n", response)
+        logger.info(f"Response from risk summarization: {response}")
     return response
 
