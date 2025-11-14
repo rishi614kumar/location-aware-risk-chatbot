@@ -230,6 +230,10 @@ FEWSHOTS_ADDR = [
      {"addresses": [
          {"house_number": "", "street_name": "Court Street & Montague Street", "borough": "Brooklyn", "raw": "Court Street in Downtown Brooklyn", "notes": "Downtown Brooklyn"}
      ]}),
+     ("List motor vehicle accidents near The American Museum of Natural History.",
+     {"addresses": [
+         {"house_number": "200", "street_name": "Central Park West", "borough": "Manhattan", "raw": "The American Museum of Natural History", "notes": "The American Museum of Natural History"}
+     ]})
 ]
 
 # Canonical mapping from risk categories to the datasets that provide answers.
