@@ -1,5 +1,5 @@
 import chainlit as cl
-from llm.LLMParser import route_query_to_datasets_multi
+from llm.LLMParser import get_default_parser
 from scripts.DataHandler import DataHandler
 from llm.LLMInterface import Chat, make_backend
 from scripts.RiskSummarizer import summarize_risk
@@ -9,7 +9,8 @@ import logging
 import asyncio
 
 # LLM for conversational response
-llm_chat = Chat(make_backend(provider="gemini"))
+llm_backend = make_backend(provider="openai")
+llm_chat = Chat(llm_backend)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +35,8 @@ async def on_message(msg: cl.Message):
     await cl.Message(content=f"{llm_response}").send()
 
     # 2. Parse for structured info
-    result = route_query_to_datasets_multi(user_text)
+    parser = get_default_parser(backend=llm_backend)
+    result = parser.route_query_to_datasets(user_text)
     logger.info(f'Parsed result: {result}')
     categories = result.get('categories', [])
     datasets = result.get('dataset_names', [])
