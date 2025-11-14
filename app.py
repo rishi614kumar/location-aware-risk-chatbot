@@ -5,17 +5,11 @@ from llm.LLMInterface import Chat, make_backend
 from scripts.RiskSummarizer import summarize_risk
 from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt, get_loading_datasets_prompt
 from scripts.GeoScope import get_dataset_filters
-import logging
+from config.logger import logger
 import asyncio
 
 # LLM for conversational response
 llm_chat = Chat(make_backend(provider="gemini"))
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s',
-)
-logger = logging.getLogger(__name__)
 
 @cl.on_chat_start
 async def start():

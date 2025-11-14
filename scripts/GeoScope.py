@@ -13,6 +13,7 @@ from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl
 from config.settings import DATASET_CONFIG
+from config.logger import logger
 
 def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     house = (record.get("house_number") or "").strip()
@@ -20,7 +21,7 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     borough = (record.get("borough") or "").strip()
 
     if not street or not borough:
-        print(f"⚠️ No proper address for {normalized} ({borough}): {exc}")
+        logger.warning(f"No proper address for {normalized} ({borough})")
         return None
 
     normalized = street.replace(" and ", " & ").replace(" AND ", " & ")
@@ -29,19 +30,19 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
         try:
             street_one, street_two = [s.strip() for s in normalized.split("&", 1)]
             bbl_intersection = get_bbl_from_intersection(street_one, street_two, borough)
-            print(f"✅ Geoclient intersection lookup: {street_one} & {street_two}, {borough} → BBL {bbl_intersection}")
+            logger.info(f"Geoclient intersection lookup: {street_one} & {street_two}, {borough} → BBL {bbl_intersection}")
             return bbl_intersection
         except Exception as exc:
-            print(f"⚠️ Intersection lookup failed for {normalized} ({borough}): {exc}")
+            logger.warning(f"Intersection lookup failed for {normalized} ({borough}): {exc}")
             return None
 
     if house:
         try:
             bbl_address = get_bbl_from_address(f"{house} {street}", borough)
-            print(f"✅ Geoclient lookup: {house} {street}, {borough} → BBL {bbl_address}")
+            logger.info(f"Geoclient lookup: {house} {street}, {borough} → BBL {bbl_address}")
             return bbl_address
         except Exception as exc:
-            print(f"⚠️ Address lookup failed for {house} {street} ({borough}): {exc}")
+            logger.warning(f"Address lookup failed for {house} {street} ({borough}): {exc}")
 
     return None
 
@@ -75,7 +76,7 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
             if val:
                 units.add(val)
         except Exception as e:
-            print(f"⚠️ Surrounding conversion failed for {b} ({geo_unit}): {e}")
+            logger.warning(f"Surrounding conversion failed for {b} ({geo_unit}): {e}")
             continue
 
     return list(units)
@@ -84,7 +85,7 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
     filters: Dict[str, Dict[str, Any]] = {}
 
     if not addresses:
-        print("⚠️ No address provided — using default preview mode.")
+        logger.warning("No address provided — using default preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
         return filters
@@ -99,7 +100,7 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
     resolved_bbls = list(dict.fromkeys(bbl for bbl in resolved_bbls if bbl))
 
     if not resolved_bbls:
-        print("⚠️ No BBLs resolved from provided addresses; using preview mode.")
+        logger.warning("No BBLs resolved from provided addresses; using preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
         return filters
@@ -117,20 +118,19 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
                 for item in results:
                     nearby_set.add(item)
             except Exception as exc:
-                print(f"⚠️ Surrounding lookup failed for {bbl}: {exc}")
+                logger.warning(f"Surrounding lookup failed for {bbl}: {exc}")
                 nearby_set.add(bbl)
-        
         nearby_bbls = sorted(nearby_set)
-        print(f"✅ Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
+        logger.info(f"Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
         try:
             nearby_bbls = list(get_surrounding_bbls_from_bbl(
                 bbl=bbl,
                 mode="street",      # or "radius"
                 include_self=True
             ))
-            print(f"✅ Found {len(nearby_bbls)} surrounding BBLs")
+            logger.info(f"Found {len(nearby_bbls)} surrounding BBLs")
         except Exception as e:
-            print(f"⚠️ Surrounding lookup failed: {e}")
+            logger.warning(f"Surrounding lookup failed: {e}")
             nearby_bbls = [bbl]
     else:
         nearby_bbls = [bbl]
@@ -196,24 +196,27 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
                         f"AND Block IN ({block_vals}) "
                         f"AND Lot IN ({lot_vals})"
                     )
-                    print(f"✅ Applied split-BBL filter on {ds_name}: {len(block_list)} lots")
+                    logger.info(f"Applied split-BBL filter on {ds_name}: {len(block_list)} lots")
 
             else:
-                print(f"⚠️ Unknown geo_unit '{geo_unit}' for {ds_name}; fallback to preview.")
+                logger.warning(f"Unknown geo_unit '{geo_unit}' for {ds_name}; fallback to preview.")
 
             # Finalize filter
             if where_str:
                 filters[ds_name] = {"where": where_str, "limit": 1000}
-                print(f"✅ Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
+                logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
             else:
                 filters[ds_name] = {"limit": 200}
-                print(f"⚠️ No valid filter for {ds_name}; using preview mode.")
+                logger.warning(f"No valid filter for {ds_name}; using preview mode.")
 
         except NotImplementedError:
-            print(f"⚠️ Skipping dataset '{ds_name}' — API not implemented.")
+            logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
             filters[ds_name] = {"limit": 0}
         except Exception as e:
-            print(f"⚠️ Unexpected error on {ds_name}: {e}")
+            logger.error(f"Unexpected error on {ds_name}: {e}")
             filters[ds_name] = {"limit": 100}
+
+    # Log the final filters dict for debugging
+    logger.info(f"Final dataset filters returned: {filters}")
 
     return filters
