@@ -17,7 +17,8 @@ from config.logger import logger
 from scripts.ConversationalUnit import (
     DecideModeUnit, DecideReuseParsedUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
     DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit,
-    ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit, BuildDatasetFiltersUnit
+    ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit, BuildDatasetFiltersUnit,
+    SurroundingDecisionUnit
 )
 
 class ConversationalAgent:
@@ -32,6 +33,7 @@ class ConversationalAgent:
             "parse_query": ParseQueryUnit(),
             "parsed_result_format": ParsedResultFormatUnit(),
             "data_preview": DataPreviewUnit(self.llm_chat),
+            "surrounding_decision": SurroundingDecisionUnit(self.llm_chat),
             "resolve_bbls": ResolveBBLsUnit(),
             "aggregate_surrounding": AggregateSurroundingBBLsUnit(),
             "build_dataset_filters": BuildDatasetFiltersUnit(),
@@ -86,9 +88,15 @@ class ConversationalAgent:
         context = await self.units["data_preview"].run(context)
         yield context["llm_data_response"]
 
-        # Resolve BBLs -> Aggregate -> Build filters
+        # Resolve BBLs -> (optional aggregate) -> Build filters
         context = await self.units["resolve_bbls"].run(context)
-        context = await self.units["aggregate_surrounding"].run(context)
+        context = await self.units["surrounding_decision"].run(context)
+        surrounding_decision = context["surrounding_decision"]
+        logger.info(f"Surrounding decision: {surrounding_decision}")
+        if surrounding_decision == "include_surrounding":
+            context = await self.units["aggregate_surrounding"].run(context)
+        else:
+            context["nearby_bbls"] = context.get("resolved_bbls", [])  # use only target
         context = await self.units["build_dataset_filters"].run(context)
 
         # Filter datasets

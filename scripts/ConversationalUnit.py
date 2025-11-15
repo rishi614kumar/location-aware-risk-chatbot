@@ -235,3 +235,19 @@ class ParsedResultFormatUnit(ConversationalUnit):
         )
         context["formatted_parsed_result"] = formatted
         return context
+
+class SurroundingDecisionUnit(ConversationalUnit):
+    def __init__(self, llm_chat):
+        super().__init__("surrounding_decision")
+        self.llm_chat = llm_chat
+    async def run(self, context):
+        from prompts.app_prompts import get_surrounding_decision_prompt
+        user_text = context["user_text"]
+        chat_history = context["chat_history"]
+        parsed_result = context.get("parsed_result", {})
+        decision_prompt = get_surrounding_decision_prompt(user_text, chat_history, parsed_result)
+        decision = self.llm_chat.ask(decision_prompt).strip().lower()
+        if decision not in ("include_surrounding", "target_only"):
+            decision = "target_only"
+        context["surrounding_decision"] = decision
+        return context

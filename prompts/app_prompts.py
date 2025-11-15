@@ -110,7 +110,7 @@ def get_show_data_decision_prompt(user_text, chat_history, parsed_result):
     Respond with either 'show_data' or 'hide_data'.
     """
     return (
-        f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and parsed results: '{parsed_result}', decide if the user wants to see the actual data preview. If the user is asking to see the data, show it. Otherwise, hide it. Respond with either 'show_data' or 'hide_data'.)"
+        f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and parsed result: '{parsed_result}', decide if the user is requesting to see the actual data preview. Respond with 'show_data' if they want to see it, or 'hide_data' if they do not'.)"
     )
 
 def get_reuse_parsed_decision_prompt(user_text, chat_history, last_parsed_result):
@@ -120,5 +120,16 @@ def get_reuse_parsed_decision_prompt(user_text, chat_history, last_parsed_result
     """
     return (
         f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and the last parsed result: '{last_parsed_result}', decide if you should reuse the last parsed datasets and addresses, or reparse from the new query. Respond with either 'reuse' or 'reparse'.)"
+    )
+
+def get_surrounding_decision_prompt(user_text, chat_history, parsed_result):
+    """Prompt for deciding whether to include surrounding BBLs (spatial expansion) or only the target BBLs.
+    Respond with either 'include_surrounding' or 'target_only'."""
+    return (
+        "$(META-PROMPT: The user query is: '" + str(user_text) + "'. Chat history: '" + str(chat_history) + "'. Parsed result: '" + str(parsed_result) + "'.\n"
+        "Decide if spatial expansion to surrounding parcels/units (nearby BBLs, precincts, etc.) is warranted.\n"
+        "Choose 'include_surrounding' if the user asks for broader area context, neighborhood, surrounding blocks, nearby risk, comparative analysis, or aggregates.\n"
+        "Choose 'target_only' if the user focuses strictly on the exact provided address/intersection or wants precise data only for that location.\n"
+        "Respond with ONLY 'include_surrounding' or 'target_only'.)"
     )
 
