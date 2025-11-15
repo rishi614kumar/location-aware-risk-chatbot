@@ -3,6 +3,8 @@ import os
 
 load_dotenv()
 
+CHATBOT_TYPEWRITER_DELAY = 0.01  # seconds per character; adjust for speed (set to 0 for fastest)
+
 GEOCLIENT_API_KEY= os.getenv("GEOCLIENT_API_KEY")
 MAPPLUTO_GDB_PATH = os.getenv("MAPPLUTO_GDB_PATH")
 LION_GDB_PATH = os.getenv("LION_GDB_PATH")
