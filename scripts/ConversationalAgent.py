@@ -16,7 +16,8 @@ from llm.LLMParser import route_query_to_datasets_multi
 from config.logger import logger
 from scripts.ConversationalUnit import (
     DecideModeUnit, DecideReuseParsedUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
-    DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit
+    DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit,
+    ParsedResultFormatUnit
 )
 
 class ConversationalAgent:
@@ -29,6 +30,7 @@ class ConversationalAgent:
             "decide_mode": DecideModeUnit(self.llm_chat),
             "decide_reuse_parsed": DecideReuseParsedUnit(self.llm_chat),
             "parse_query": ParseQueryUnit(),
+            "parsed_result_format": ParsedResultFormatUnit(),
             "data_preview": DataPreviewUnit(self.llm_chat),
             "filter_datasets": FilterDatasetsUnit(),
             "decide_risk_summary": DecideRiskSummaryUnit(self.llm_chat),
@@ -73,31 +75,9 @@ class ConversationalAgent:
             self.last_parsed_result = context["parsed_result"]
             logger.info(f"Parsed result: {context['parsed_result']}")
 
-        result = context["parsed_result"]
-        categories = result.get('categories', [])
-        datasets = result.get('dataset_names', [])
-        addresses = result.get('address', [])
-        confidence = result.get('confidence')
-        cat_str = '\n'.join(f'- {c}' for c in categories) or 'None'
-        ds_str = '\n'.join(f'- {d}' for d in datasets) or 'None'
-        if addresses:
-            addr_str = '\n\n'.join(
-                '\n'.join([
-                    f"  House Number: {a.get('house_number', '')}",
-                    f"  Street Name:  {a.get('street_name', '')}",
-                    f"  Borough:      {a.get('borough', '')}",
-                    f"  Raw:          {a.get('raw', '')}",
-                    f"  Notes:        {a.get('notes', '')}"
-                ]) for a in addresses
-            )
-        else:
-            addr_str = 'None'
-        formatted = (
-            f"**Categories:**\n{cat_str}\n\n"
-            f"**Datasets:**\n{ds_str}\n\n"
-            f"**Addresses:**\n{addr_str}\n\n"
-            f"**Confidence:** {confidence}"
-        )
+        # Format parsed result
+        context = await self.units["parsed_result_format"].run(context)
+        formatted = context["formatted_parsed_result"]
         logger.info(f'Formatted parsing output: {formatted}')
 
         # Data preview

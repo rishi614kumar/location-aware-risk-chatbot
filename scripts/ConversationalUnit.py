@@ -157,3 +157,35 @@ class ConversationalAnswerUnit(ConversationalUnit):
         response = self.llm_chat.ask(get_conversational_answer_prompt(user_text, chat_history))
         context["conversational_response"] = response
         return context
+
+class ParsedResultFormatUnit(ConversationalUnit):
+    def __init__(self):
+        super().__init__("parsed_result_format")
+    async def run(self, context):
+        result = context["parsed_result"]
+        categories = result.get('categories', [])
+        datasets = result.get('dataset_names', [])
+        addresses = result.get('address', [])
+        confidence = result.get('confidence')
+        cat_str = '\n'.join(f'- {c}' for c in categories) or 'None'
+        ds_str = '\n'.join(f'- {d}' for d in datasets) or 'None'
+        if addresses:
+            addr_str = '\n\n'.join(
+                '\n'.join([
+                    f"  House Number: {a.get('house_number', '')}",
+                    f"  Street Name:  {a.get('street_name', '')}",
+                    f"  Borough:      {a.get('borough', '')}",
+                    f"  Raw:          {a.get('raw', '')}",
+                    f"  Notes:        {a.get('notes', '')}"
+                ]) for a in addresses
+            )
+        else:
+            addr_str = 'None'
+        formatted = (
+            f"**Categories:**\n{cat_str}\n\n"
+            f"**Datasets:**\n{ds_str}\n\n"
+            f"**Addresses:**\n{addr_str}\n\n"
+            f"**Confidence:** {confidence}"
+        )
+        context["formatted_parsed_result"] = formatted
+        return context
