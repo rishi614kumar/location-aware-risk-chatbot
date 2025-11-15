@@ -40,7 +40,7 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
                 Extracted data for dataset:{ds.name}:
                 Which has the following description: {ds.description}
                 Extracted rows: \n \n
-                {ds.df.head(100).to_markdown(index=False)} \n \n
+                {ds.df.to_markdown(index=False)} \n \n
             """)
             logger.info(f"length of extracted rows for {ds.name}: {len(ds.df)}")
     prompt += (f"""

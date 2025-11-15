@@ -8,6 +8,8 @@ from scripts.GeoScope import get_dataset_filters
 from config.logger import logger
 import asyncio
 from scripts.ConversationalAgent import ConversationalAgent
+from config.settings import CHATBOT_TYPEWRITER_DELAY
+import time  # added for per-query timing
 
 # LLM for conversational response
 llm_chat = Chat(make_backend(provider="gemini"))
@@ -23,11 +25,26 @@ async def start():
 
 @cl.on_message
 async def on_message(msg: cl.Message):
+    start_ts = time.perf_counter()  # start timer
     user_text = msg.content
     logger.info(f'Received message: {user_text}')
-    # Stream chunks directly instead of waiting for full response
+    # Create a single message and stream tokens for typewriter effect
+    streamed_msg = cl.Message(content="")
+    await streamed_msg.send()
     async for chunk in agent.stream(user_text):
-        await cl.Message(content=chunk).send()
+        # Chunk-level streaming preserves original newlines & markdown.
+        # Add a separating newline after each logical chunk for readability.
+        if CHATBOT_TYPEWRITER_DELAY:
+            for token in chunk:  # token here is each character for effect
+                await streamed_msg.stream_token(token)
+                await asyncio.sleep(CHATBOT_TYPEWRITER_DELAY)
+        else:
+            await streamed_msg.stream_token(chunk)
+        if not chunk.endswith("\n"):
+            await streamed_msg.stream_token("\n\n")
+    await streamed_msg.update()
+    elapsed = time.perf_counter() - start_ts
+    logger.info(f"Query completed in {elapsed:.3f}s")
     '''--- Previous implementation without ConversationalAgent ---'''
     '''# 2. Parse for structured info
     result = route_query_to_datasets_multi(user_text)
