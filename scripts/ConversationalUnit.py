@@ -55,16 +55,49 @@ class DataPreviewUnit(ConversationalUnit):
         self.llm_chat = llm_chat
     async def run(self, context):
         from scripts.DataHandler import DataHandler
-        from scripts.GeoScope import get_dataset_filters
         from prompts.app_prompts import get_loading_datasets_prompt
         import asyncio
         result = context["parsed_result"]
         datasets = result.get('dataset_names', [])
-        addresses = result.get('address', [])
         handler = DataHandler(datasets)
         context["handler"] = handler
         context["llm_data_response"] = self.llm_chat.ask(get_loading_datasets_prompt(handler))
-        dataset_filters = await asyncio.to_thread(get_dataset_filters, addresses, handler)
+        return context
+
+class ResolveBBLsUnit(ConversationalUnit):
+    def __init__(self):
+        super().__init__("resolve_bbls")
+    async def run(self, context):
+        from scripts.GeoScope import resolve_bbls_from_addresses
+        import asyncio
+        addresses = context.get("parsed_result", {}).get('address', [])
+        resolved_bbls = await asyncio.to_thread(resolve_bbls_from_addresses, addresses)
+        context["resolved_bbls"] = resolved_bbls
+        logger.info(f"Resolved BBLs: {resolved_bbls}")
+        return context
+
+class AggregateSurroundingBBLsUnit(ConversationalUnit):
+    def __init__(self):
+        super().__init__("aggregate_surrounding")
+    async def run(self, context):
+        from scripts.GeoScope import aggregate_surrounding_bbls
+        import asyncio
+        resolved_bbls = context.get("resolved_bbls", [])
+        nearby_bbls = await asyncio.to_thread(aggregate_surrounding_bbls, resolved_bbls, True)
+        context["nearby_bbls"] = nearby_bbls
+        logger.info(f"Nearby BBLs: {len(nearby_bbls)}")
+        return context
+
+class BuildDatasetFiltersUnit(ConversationalUnit):
+    def __init__(self):
+        super().__init__("build_dataset_filters")
+    async def run(self, context):
+        from scripts.GeoScope import build_dataset_filters_for_handler
+        import asyncio
+        handler = context["handler"]
+        resolved_bbls = context.get("resolved_bbls", [])
+        nearby_bbls = context.get("nearby_bbls", [])
+        dataset_filters = await asyncio.to_thread(build_dataset_filters_for_handler, handler, resolved_bbls, nearby_bbls)
         context["dataset_filters"] = dataset_filters
         return context
 

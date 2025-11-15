@@ -17,7 +17,7 @@ from config.logger import logger
 from scripts.ConversationalUnit import (
     DecideModeUnit, DecideReuseParsedUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
     DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit,
-    ParsedResultFormatUnit
+    ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit, BuildDatasetFiltersUnit
 )
 
 class ConversationalAgent:
@@ -32,6 +32,9 @@ class ConversationalAgent:
             "parse_query": ParseQueryUnit(),
             "parsed_result_format": ParsedResultFormatUnit(),
             "data_preview": DataPreviewUnit(self.llm_chat),
+            "resolve_bbls": ResolveBBLsUnit(),
+            "aggregate_surrounding": AggregateSurroundingBBLsUnit(),
+            "build_dataset_filters": BuildDatasetFiltersUnit(),
             "filter_datasets": FilterDatasetsUnit(),
             "decide_risk_summary": DecideRiskSummaryUnit(self.llm_chat),
             "risk_summary": RiskSummaryUnit(),
@@ -82,6 +85,11 @@ class ConversationalAgent:
         # Data preview intro
         context = await self.units["data_preview"].run(context)
         yield context["llm_data_response"]
+
+        # Resolve BBLs -> Aggregate -> Build filters
+        context = await self.units["resolve_bbls"].run(context)
+        context = await self.units["aggregate_surrounding"].run(context)
+        context = await self.units["build_dataset_filters"].run(context)
 
         # Filter datasets
         context = await self.units["filter_datasets"].run(context)
