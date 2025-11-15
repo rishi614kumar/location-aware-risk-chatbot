@@ -25,9 +25,9 @@ async def start():
 async def on_message(msg: cl.Message):
     user_text = msg.content
     logger.info(f'Received message: {user_text}')
-    response, followup = await agent.run(user_text)
-    await cl.Message(content=response).send()
-    await cl.Message(content=followup).send()
+    # Stream chunks directly instead of waiting for full response
+    async for chunk in agent.stream(user_text):
+        await cl.Message(content=chunk).send()
     '''--- Previous implementation without ConversationalAgent ---'''
     '''# 2. Parse for structured info
     result = route_query_to_datasets_multi(user_text)

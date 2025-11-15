@@ -40,7 +40,8 @@ class ConversationalAgent:
             "conversational_answer": ConversationalAnswerUnit(self.llm_chat)
         }
 
-    async def run(self, user_text):
+    async def stream(self, user_text):
+        """Async generator yielding content chunks as soon as they are ready."""
         self.chat_history.append(user_text)
         history_str = "\n".join(self.chat_history)
         context = {
@@ -49,21 +50,20 @@ class ConversationalAgent:
             "llm_chat": self.llm_chat,
             "last_parsed_result": self.last_parsed_result
         }
-        # 1. Decide mode
+        # Decide mode
         context = await self.units["decide_mode"].run(context)
         mode = context["mode"]
         logger.info(f"Agent decision: {mode}")
 
         if mode == "conversational":
             context = await self.units["conversational_answer"].run(context)
-            response = context["conversational_response"]
-            followup = ''
+            yield context["conversational_response"]
             if "parsed_result" in context:
                 context = await self.units["followup"].run(context)
-                followup = context["followup_response"]
-            return response, followup
+                yield context["followup_response"]
+            return
 
-        # 1.5 Decide reuse/reparse
+        # Decide reuse / reparse
         context = await self.units["decide_reuse_parsed"].run(context)
         reuse_decision = context["reuse_decision"]
         logger.info(f"Reuse parsed decision: {reuse_decision}")
@@ -75,15 +75,16 @@ class ConversationalAgent:
             self.last_parsed_result = context["parsed_result"]
             logger.info(f"Parsed result: {context['parsed_result']}")
 
-        # Format parsed result
+        # Format & yield parsed result
         context = await self.units["parsed_result_format"].run(context)
-        formatted = context["formatted_parsed_result"]
-        logger.info(f'Formatted parsing output: {formatted}')
+        yield context["formatted_parsed_result"]
 
-        # Data preview
+        # Data preview intro
         context = await self.units["data_preview"].run(context)
+        yield context["llm_data_response"]
+
+        # Filter datasets
         context = await self.units["filter_datasets"].run(context)
-        llm_data_response = context["llm_data_response"]
         filtered_datasets = context["filtered_datasets"]
         data_samples = context["data_samples"]
 
@@ -91,34 +92,34 @@ class ConversationalAgent:
         context = await self.units["decide_risk_summary"].run(context)
         risk_decision = context["risk_decision"]
         logger.info(f"Risk summary decision: {risk_decision}")
-        risk_summary = None
         if risk_decision == "risk_summary_needed":
             context = await self.units["risk_summary"].run(context)
-            risk_summary = context["risk_summary"]
-            logger.info(f'Risk summary: {risk_summary}')
+            yield f"**Risk Summary:**\n{context['risk_summary']}"
 
         # Decide show data
         context = await self.units["decide_show_data"].run(context)
         show_data_decision = context["show_data_decision"]
         logger.info(f"Show data decision: {show_data_decision}")
-        data_preview_msgs = []
         if show_data_decision == "show_data":
             for ds in filtered_datasets:
                 df_head = data_samples.get(ds.name)
                 preview = df_head.to_markdown(index=False) if hasattr(df_head, 'to_markdown') else str(df_head)
-                msg = f"**{ds.name}**\n{ds.description}\n\nPreview:\n{preview}"
-                data_preview_msgs.append(msg)
-                logger.info(f'Dataset {ds.name} preview included')
+                yield f"**{ds.name}**\n{ds.description}\n\nPreview:\n{preview}"
 
         # Followup
         context = await self.units["followup"].run(context)
-        followup = context["followup_response"]
+        yield context["followup_response"]
 
-        # Compose final response
-        response_parts = [formatted, llm_data_response]
-        if data_preview_msgs:
-            response_parts.extend(data_preview_msgs)
-        if risk_summary:
-            response_parts.append(f"**Risk Summary:**\n{risk_summary}")
-        response = "\n\n".join(response_parts)
-        return response, followup
+    async def run(self, user_text):
+        """Backward compatible: collect all streamed chunks into final response + followup."""
+        parts = []
+        async for chunk in self.stream(user_text):
+            parts.append(chunk)
+        # Last part is followup, separate it
+        if parts:
+            followup = parts[-1]
+            response_parts = parts[:-1]
+        else:
+            followup = ""
+            response_parts = []
+        return response_parts, followup

@@ -1,4 +1,5 @@
 from typing import Any, Dict
+from config.logger import logger
 
 class ConversationalUnit:
     def __init__(self, name: str):
@@ -80,10 +81,22 @@ class FilterDatasetsUnit(ConversationalUnit):
             filter_kwargs = dataset_filters.get(ds.name, {})
             where = filter_kwargs.get("where")
             limit = filter_kwargs.get("limit")
-            df_full = await asyncio.to_thread(ds.df_filtered, where, limit)
-            df_head = df_full.head(5)
+            try:
+                df_full = await asyncio.to_thread(ds.df_filtered, where, limit)
+            except Exception as e:
+                logger.warning(f"Filtered fetch failed for {ds.name}: {e}; using empty DataFrame")
+                import pandas as pd
+                df_full = pd.DataFrame()
+            # If result empty just keep empty (no fallback to unfiltered)
+            if (df_full is None) or (hasattr(df_full, 'empty') and df_full.empty):
+                import pandas as pd
+                df_full = pd.DataFrame()
+            df_head = df_full.head(5) if hasattr(df_full, 'head') else df_full
             if where is not None or limit is not None:
-                object.__setattr__(ds, "_df_cache", df_full)
+                try:
+                    object.__setattr__(ds, "_df_cache", df_full)
+                except Exception as e:
+                    logger.warning(f"Could not set _df_cache for {ds.name}: {e}")
             data_samples[ds.name] = df_head
             filtered_datasets.append(ds)
         handler._datasets = filtered_datasets
