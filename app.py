@@ -7,33 +7,43 @@ from prompts.app_prompts import get_first_message, get_system_prompt, get_conver
 from scripts.GeoScope import get_dataset_filters
 from config.logger import logger
 import asyncio
+from scripts.ConversationalAgent import ConversationalAgent
 
 # LLM for conversational response
 llm_chat = Chat(make_backend(provider="gemini"))
+# Persistent agent instance
+agent = ConversationalAgent(chat_backend=llm_chat)
 
 @cl.on_chat_start
 async def start():
     logger.info('Chat started')
-    # Set a system context for the LLM chat (imported from prompts.py)
-    llm_chat.start(system_instruction=get_system_prompt())
+    # Use the agent's llm_chat for context
+    agent.llm_chat.start(system_instruction=get_system_prompt())
     await cl.Message(get_first_message()).send()
 
 @cl.on_message
 async def on_message(msg: cl.Message):
     user_text = msg.content
     logger.info(f'Received message: {user_text}')
-    # 1. Conversational LLM response
-    llm_response = llm_chat.ask(get_conversational_meta_prompt(user_text))
-    logger.info(f'LLM response: {llm_response}')
-    await cl.Message(content=f"{llm_response}").send()
-
-    # 2. Parse for structured info
+    response, followup = await agent.run(user_text)
+    await cl.Message(content=response).send()
+    await cl.Message(content=followup).send()
+    '''--- Previous implementation without ConversationalAgent ---'''
+    '''# 2. Parse for structured info
     result = route_query_to_datasets_multi(user_text)
     logger.info(f'Parsed result: {result}')
     categories = result.get('categories', [])
     datasets = result.get('dataset_names', [])
     addresses = result.get('address', [])
     confidence = result.get('confidence')
+
+    # --- Robust conversational logic ---
+    # If no address and no relevant datasets/categories, continue conversation only
+    if not addresses and not datasets and not categories:
+        from prompts.app_prompts import get_conversational_fallback_prompt
+        followup = llm_chat.ask(get_conversational_fallback_prompt())
+        await cl.Message(content=followup).send()
+        return
 
     # Only show parsing output if there is something to show
     if categories or datasets or addresses:
@@ -132,4 +142,4 @@ async def on_message(msg: cl.Message):
     except Exception as e:
         logger.error(f"Error in followup response: {e}")
         await cl.Message(content=f"Error in followup response: {e}").send()
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)'''
