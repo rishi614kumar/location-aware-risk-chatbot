@@ -32,10 +32,8 @@ async def on_message(msg: cl.Message):
     streamed_msg = cl.Message(content="")
     await streamed_msg.send()
     async for chunk in agent.stream(user_text):
-        # Chunk-level streaming preserves original newlines & markdown.
-        # Add a separating newline after each logical chunk for readability.
         if CHATBOT_TYPEWRITER_DELAY:
-            for token in chunk:  # token here is each character for effect
+            for token in chunk:
                 await streamed_msg.stream_token(token)
                 await asyncio.sleep(CHATBOT_TYPEWRITER_DELAY)
         else:
@@ -45,6 +43,34 @@ async def on_message(msg: cl.Message):
     await streamed_msg.update()
     elapsed = time.perf_counter() - start_ts
     logger.info(f"Query completed in {elapsed:.3f}s")
+
+    # diagnostic log block
+    ctx = agent.last_context or {}
+    parsed = ctx.get("parsed_result", {})
+    decisions = {
+        "mode": ctx.get("mode"),
+        "reuse_decision": ctx.get("reuse_decision"),
+        "surrounding_decision": ctx.get("surrounding_decision"),
+        "risk_decision": ctx.get("risk_decision"),
+        "show_data_decision": ctx.get("show_data_decision"),
+    }
+    dataset_filters = ctx.get("dataset_filters", {})
+    filtered_datasets = ctx.get("filtered_datasets", [])
+    data_samples = ctx.get("data_samples", {})
+
+    lengths = {name: (getattr(df, 'shape', (len(df) if hasattr(df, '__len__') else None, None))[0] if df is not None else 0) for name, df in data_samples.items()}
+
+    logger.info(
+        "QUERY DIAGNOSTICS | decisions=%s | parsed_categories=%s | parsed_datasets=%s | addresses=%s | confidence=%s | filters=%s | dataset_lengths=%s | elapsed=%.3fs",
+        decisions,
+        parsed.get('categories'),
+        parsed.get('dataset_names'),
+        parsed.get('address'),
+        parsed.get('confidence'),
+        dataset_filters,
+        lengths,
+        elapsed
+    )
     '''--- Previous implementation without ConversationalAgent ---'''
     '''# 2. Parse for structured info
     result = route_query_to_datasets_multi(user_text)

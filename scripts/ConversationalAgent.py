@@ -26,6 +26,7 @@ class ConversationalAgent:
         self.llm_chat = chat_backend or Chat(make_backend(provider="gemini"))
         self.chat_history = []
         self.last_parsed_result = None
+        self.last_context = None  # store final context for logging
         # Instantiate units
         self.units = {
             "decide_mode": DecideModeUnit(self.llm_chat),
@@ -66,6 +67,7 @@ class ConversationalAgent:
             if "parsed_result" in context:
                 context = await self.units["followup"].run(context)
                 yield context["followup_response"]
+            self.last_context = context  # store final context
             return
 
         # Decide reuse / reparse
@@ -125,6 +127,7 @@ class ConversationalAgent:
         # Followup
         context = await self.units["followup"].run(context)
         yield context["followup_response"]
+        self.last_context = context  # store final context for logging
 
     async def run(self, user_text):
         """Backward compatible: collect all streamed chunks into final response + followup."""
