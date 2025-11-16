@@ -147,6 +147,50 @@ body {
   transform: translateY(1px);
 }
 
+.cu-landing-return {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  height: 34px !important;
+  padding: 0 .85rem !important;
+  font-size: .85rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+
+.cu-landing-return::before {
+  content: "⟳";
+  font-size: .8rem;
+  opacity: .7;
+}
+
+.cu-landing-return-floating {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 9000;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  height: 40px;
+  padding: 0 1rem;
+  font-size: .9rem;
+  font-weight: 600;
+  border-radius: 18px;
+  border: 1px solid color-mix(in oklab, var(--divider) 70%, transparent);
+  background: linear-gradient(180deg, var(--surface), color-mix(in oklab, var(--surface) 70%, var(--cu-blue-50)));
+  color: var(--cu-deep);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.cu-landing-return-floating::before {
+  content: "⟳";
+  font-size: .9rem;
+  opacity: .7;
+}
+
 /* --------------------------------------------
    Sidebar
 --------------------------------------------- */
@@ -418,11 +462,11 @@ body.hc {
 .cl-modal [data-testid="modal-close-button"],
 .cl-modal button[aria-label="Close"],
 .cl-modal button[title="Close"] {
-  width: 16px !important; /* reduced from 22px */
-  height: 16px !important; /* reduced from 22px */
+  width: 16px !important; 
+  height: 16px !important; 
   min-width: 16px !important;
   padding: 0 !important;
-  font-size: .55rem !important; /* smaller X */
+  font-size: .55rem !important; 
   box-shadow: 0 2px 5px rgba(0, 51, 102, 0.18);
   background: linear-gradient(180deg, var(--cu-navy), #022e5c) !important;
 }
