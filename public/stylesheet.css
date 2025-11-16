@@ -272,9 +272,9 @@ button, .send-btn, .cl-button-primary {
   border: 0 !important;
   border-radius: 14px !important;
   font-weight: 700 !important;
-  padding: 0 1rem !important;
-  height: 40px !important;
-  font-size: .95rem !important;
+  padding: 0 0.85rem !important;
+  height: 36px !important;
+  font-size: .9rem !important;
   box-shadow: 0 10px 22px rgba(0, 51, 102, 0.22);
   transition: transform var(--speed) var(--easing), box-shadow var(--speed) var(--easing), background var(--speed) var(--easing);
 }
@@ -410,5 +410,25 @@ body.hc {
 /* Reduced motion: tone down transforms */
 @media (prefers-reduced-motion: reduce) {
   .cl-message:hover, button:hover, .send-btn:hover { transform: none; }
+}
+
+/* Smaller close / modal buttons (X) */
+.cl-modal .cl-close-btn,
+.cl-modal .close-btn,
+.cl-modal [data-testid="modal-close-button"],
+.cl-modal button[aria-label="Close"],
+.cl-modal button[title="Close"] {
+  width: 16px !important; /* reduced from 22px */
+  height: 16px !important; /* reduced from 22px */
+  min-width: 16px !important;
+  padding: 0 !important;
+  font-size: .55rem !important; /* smaller X */
+  box-shadow: 0 2px 5px rgba(0, 51, 102, 0.18);
+  background: linear-gradient(180deg, var(--cu-navy), #022e5c) !important;
+}
+.cl-modal .cl-close-btn:hover,
+.cl-modal .close-btn:hover,
+.cl-modal [data-testid="modal-close-button"]:hover {
+  box-shadow: 0 3px 8px rgba(0, 51, 102, 0.24);
 }
 
