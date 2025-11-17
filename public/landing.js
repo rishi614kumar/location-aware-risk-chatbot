@@ -242,8 +242,9 @@
   // Hide Readme + theme toggle
   // -------------------------------
   function hideNativeHeaderButtons() {
+    // 1) Global pass: hide anything explicitly named Readme or theme/color-mode
     const candidates = document.querySelectorAll(
-      "button, a, [role='button'], [data-testid]",
+      "button, a, [role='button'], [data-testid]"
     );
 
     candidates.forEach((el) => {
@@ -261,7 +262,7 @@
         return;
       }
 
-      // Kill any theme / color-mode toggle
+      // Kill any explicit theme / color-mode toggle
       if (
         label.includes("theme") ||
         label.includes("dark mode") ||
@@ -271,6 +272,36 @@
       ) {
         el.style.display = "none";
         return;
+      }
+    });
+
+    // 2) Header-specific heuristic: hide icon-only button between Homepage and avatar
+    const header = document.querySelector(".cl-header");
+    if (!header) return;
+
+    const headerButtons = header.querySelectorAll("button, [role='button']");
+
+    headerButtons.forEach((el) => {
+      const id = el.id || "";
+      const label = (el.getAttribute("aria-label") || "").toLowerCase();
+      const text = (el.textContent || "").trim();
+
+      // Keep our custom Homepage button
+      if (id === BUTTON_ID || text.toLowerCase() === "homepage") return;
+
+      // Keep avatar / user menu (usually has 1 char text or 'avatar' testid/label)
+      const testid = (el.getAttribute("data-testid") || "").toLowerCase();
+      if (
+        testid.includes("avatar") ||
+        label.includes("avatar") ||
+        label.includes("user")
+      ) {
+        return;
+      }
+
+      // If it's an icon-only button (no visible text), hide it.
+      if (text.length === 0) {
+        el.style.display = "none";
       }
     });
   }

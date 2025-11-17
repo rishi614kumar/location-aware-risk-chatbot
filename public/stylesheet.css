@@ -131,6 +131,13 @@ main,
 /* --------------------------------------------
    Hide built-in toggles we don't want
 --------------------------------------------- */
+/* Hide tiny login-page logo in the top-left */
+.cl-login-page img[alt="logo"],
+.cl-login-page img[src*="logo_light"],
+.cl-login-page img[src*="logo_dark"] {
+  display: none !important;
+}
+
 
 /* Theme toggle */
 [data-testid="theme-toggle"],
@@ -627,4 +634,9 @@ body.hc {
   .send-btn:hover {
     transform: none;
   }
+}
+
+/* Hide the tiny broken logo on the login page */
+img[alt="logo"] {
+  display: none !important;
 }

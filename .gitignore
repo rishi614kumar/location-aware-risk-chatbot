@@ -9,3 +9,4 @@ __pycache__/
 *.pyd
 *.py[cod]
 /ds_capstone/
+chainlit_history.db
