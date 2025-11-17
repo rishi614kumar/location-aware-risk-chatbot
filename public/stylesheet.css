@@ -11,7 +11,31 @@
      UI/Body:   clean sans
    ============================================ */
 
-:root {
+/* --- Disable Chainlit's light/dark background tokens --- */
+html[data-theme="light"],
+html[data-theme="dark"],
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --bg-color: transparent !important;
+  --bg-color-secondary: transparent !important;
+  --surface-color: transparent !important;
+  --container-color: transparent !important;
+
+  /* Some installs use these names instead */
+  --color-background: transparent !important;
+  --color-surface: transparent !important;
+
+  color-scheme: light !important;
+}
+
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"],
+html,
+html[data-theme="light"],
+html[data-theme="dark"] {
+  background: transparent !important;
+  background-color: transparent !important;
   /* Core palette */
   --cu-blue: #9BDDFF;
   --cu-blue-200: #bfe6ff;
@@ -62,30 +86,29 @@
   --container-max: 980px;
   --gutter: 1.1rem;
   --speed-fast: 140ms;
+  color-scheme: light;
 }
-
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #071320;
-    --surface: #0d1a2b;
-    --text: #E8F3FF;
-    --muted: #B6CBE0;
-    --divider: #19324A;
-    --glass: rgba(10, 24, 40, 0.55);
-    --glass-strong: rgba(15, 31, 52, 0.72);
-    --shadow-xs: 0 2px 10px rgba(0,0,0,0.45);
-    --shadow-sm: 0 10px 26px rgba(0,0,0,0.45);
-    --shadow-md: 0 20px 48px rgba(0,0,0,0.5);
-    --ring: color-mix(in oklab, var(--cu-blue) 55%, black);
-    --ring-muted: color-mix(in oklab, var(--cu-blue) 28%, transparent);
-  }
+body,
+body[data-theme="light"],
+body[data-theme="dark"],
+body.chainlit-light,
+body.chainlit-dark {
+  background: radial-gradient(1200px 900px at 15% -10%, var(--cu-blue-50) 0%, transparent 60%),
+              radial-gradient(1400px 1100px at 110% 110%, var(--cu-blue) 0%, transparent 70%),
+              linear-gradient(135deg, var(--cu-blue) 0%, var(--cu-blue-50) 100%) !important;
+  background-attachment: fixed;
+  background-color: transparent !important;
+  color: var(--text) !important;
+  font-family: var(--font-ui) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* --------------------------------------------
    Page background & global type
 --------------------------------------------- */
-html, body {
+html,
+body {
   height: 100%;
 }
 
@@ -98,6 +121,24 @@ body {
   font-family: var(--font-ui) !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+#root,
+.cl-app,
+.cl-page,
+.cl-main,
+.cl-body,
+.cl-chat-layout,
+.cl-chat,
+.cl-chat-container,
+.cl-content {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+[data-testid="theme-toggle"],
+button[aria-label="Toggle theme"] {
+  display: none !important;
 }
 
 /* --------------------------------------------
@@ -476,3 +517,20 @@ body.hc {
   box-shadow: 0 3px 8px rgba(0, 51, 102, 0.24);
 }
 
+
+/* --- Force the chat canvas to be transparent so the body gradient shows --- */
+main,
+#root,
+#root > div,
+.cl-app,
+.cl-page,
+.cl-main,
+.cl-body,
+.cl-chat-layout,
+.cl-chat,
+.cl-chat-container,
+.cl-content,
+.cl-message-list {
+  background: transparent !important;
+  background-color: transparent !important;
+}

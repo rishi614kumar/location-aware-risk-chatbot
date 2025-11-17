@@ -1,27 +1,186 @@
-import chainlit as cl
-from llm.LLMParser import route_query_to_datasets_multi
-from scripts.DataHandler import DataHandler
-from llm.LLMInterface import Chat, make_backend
-from scripts.RiskSummarizer import summarize_risk
-from prompts.app_prompts import get_first_message, get_system_prompt, get_conversational_meta_prompt, get_followup_prompt, get_loading_datasets_prompt
-from scripts.GeoScope import get_dataset_filters
-from config.logger import logger
 import asyncio
+import os
+import time  # added for per-query timing
+
+import chainlit as cl
+from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
+from llm.LLMInterface import Chat, make_backend
+from prompts.app_prompts import get_first_message, get_system_prompt
+from config.logger import logger
 from scripts.ConversationalAgent import ConversationalAgent
 from config.settings import CHATBOT_TYPEWRITER_DELAY
-import time  # added for per-query timing
 
 # LLM for conversational response
 llm_chat = Chat(make_backend(provider="gemini"))
 # Persistent agent instance
 agent = ConversationalAgent(chat_backend=llm_chat)
 
+
+def _initialize_agent() -> None:
+    """Reset agent state and prime the chat backend with the system prompt."""
+    system_prompt = get_system_prompt()
+    agent.llm_chat.start(system_instruction=system_prompt)
+    agent.chat_history = []
+    agent.last_parsed_result = None
+    agent.last_context = None
+
+
+def _restore_chat_history_from_thread(thread) -> None:
+    """Populate the agent's chat history with prior user turns from a stored thread."""
+    steps = (thread or {}).get("steps") or []
+    history = []
+    for step in steps:
+        if step.get("type") == "user_message":
+            text = step.get("output") or step.get("input")
+            if text:
+                history.append(text)
+    agent.chat_history = history
+    logger.info("Restored %d prior user turns into agent history.", len(history))
+
+
+def _ensure_sqlite_schema(data_layer: SQLAlchemyDataLayer) -> None:
+    """Create persistence tables when running against a local SQLite database."""
+
+    ddl_statements = [
+        "PRAGMA foreign_keys=ON",
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            identifier TEXT NOT NULL UNIQUE,
+            metadata TEXT NOT NULL,
+            createdAt TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS threads (
+            id TEXT PRIMARY KEY,
+            createdAt TEXT,
+            name TEXT,
+            userId TEXT,
+            userIdentifier TEXT,
+            tags TEXT,
+            metadata TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS steps (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            threadId TEXT NOT NULL,
+            parentId TEXT,
+            streaming INTEGER NOT NULL,
+            waitForAnswer INTEGER,
+            isError INTEGER,
+            metadata TEXT,
+            tags TEXT,
+            input TEXT,
+            output TEXT,
+            createdAt TEXT,
+            command TEXT,
+            start TEXT,
+            end TEXT,
+            generation TEXT,
+            showInput TEXT,
+            language TEXT,
+            indent INTEGER,
+            defaultOpen INTEGER,
+            FOREIGN KEY(threadId) REFERENCES threads(id) ON DELETE CASCADE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS elements (
+            id TEXT PRIMARY KEY,
+            threadId TEXT,
+            type TEXT,
+            url TEXT,
+            chainlitKey TEXT,
+            name TEXT NOT NULL,
+            display TEXT,
+            objectKey TEXT,
+            size TEXT,
+            page INTEGER,
+            language TEXT,
+            forId TEXT,
+            mime TEXT,
+            props TEXT,
+            FOREIGN KEY(threadId) REFERENCES threads(id) ON DELETE CASCADE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS feedbacks (
+            id TEXT PRIMARY KEY,
+            forId TEXT NOT NULL,
+            threadId TEXT NOT NULL,
+            value INTEGER NOT NULL,
+            comment TEXT,
+            FOREIGN KEY(threadId) REFERENCES threads(id) ON DELETE CASCADE,
+            FOREIGN KEY(forId) REFERENCES steps(id) ON DELETE CASCADE
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_threads_user_identifier ON threads(userIdentifier)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_steps_thread ON steps(threadId)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_elements_thread ON elements(threadId)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_feedbacks_thread ON feedbacks(threadId)
+        """
+    ]
+
+    async def _create_tables():
+        for statement in ddl_statements:
+            await data_layer.execute_sql(statement, {})
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_create_tables())
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+
+@cl.data_layer
+def provide_data_layer():
+    """Expose a SQLAlchemy-backed data layer for thread persistence."""
+    conninfo = os.getenv("CHAINLIT_DB_URL", "sqlite+aiosqlite:///./chainlit_history.db")
+    data_layer = SQLAlchemyDataLayer(conninfo=conninfo)
+    if conninfo.startswith("sqlite"):
+        _ensure_sqlite_schema(data_layer)
+    return data_layer
+
+
+@cl.password_auth_callback
+def password_auth(username: str, password: str):
+    expected_user = os.getenv("CHAINLIT_ADMIN_USER")
+    expected_password = os.getenv("CHAINLIT_ADMIN_PASSWORD")
+    if not expected_user or not expected_password:
+        logger.error("Authentication credentials not configured; denying login attempt.")
+        return None
+    if username == expected_user and password == expected_password:
+        logger.info("User %s authenticated successfully.", username)
+        return cl.User(identifier=username, metadata={"role": "admin"})
+    logger.warning("Invalid credentials supplied for user %s.", username)
+    return None
+
 @cl.on_chat_start
 async def start():
     logger.info('Chat started')
-    # Use the agent's llm_chat for context
-    agent.llm_chat.start(system_instruction=get_system_prompt())
+    _initialize_agent()
     await cl.Message(get_first_message()).send()
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread):
+    thread_id = (thread or {}).get("id")
+    logger.info("Resuming chat: %s", thread_id)
+    _initialize_agent()
+    _restore_chat_history_from_thread(thread)
 
 @cl.on_message
 async def on_message(msg: cl.Message):

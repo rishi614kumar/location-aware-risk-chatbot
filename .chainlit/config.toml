@@ -112,7 +112,7 @@ custom_css = "/public/stylesheet.css"
 custom_js = "/public/landing.js"
 
 # The style of alert boxes. Can be "classic" or "modern".
-alert_style = "classic"
+alert_style = "modern"
 
 # Specify additional attributes for custom JS file
 # custom_js_attributes = "async type = \"module\""
