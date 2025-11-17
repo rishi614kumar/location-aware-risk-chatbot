@@ -92,7 +92,7 @@ default_theme = "light"
 
 # layout = "wide"
 
-default_sidebar_state = "open"
+default_sidebar_state = "closed"
 
 # Description of the assistant. This is used for HTML tags.
 # description = ""
@@ -112,13 +112,13 @@ custom_css = "/public/stylesheet.css"
 custom_js = "/public/landing.js"
 
 # The style of alert boxes. Can be "classic" or "modern".
-alert_style = "classic"
+alert_style = "modern"
 
 # Specify additional attributes for custom JS file
 # custom_js_attributes = "async type = \"module\""
 
 # Custom login page image, relative to public directory or external URL
-# login_page_image = "/public/custom-background.jpg"
+login_page_image = "/public/columbia_logo.png"
 
 # Custom login page image filter (Tailwind internal filters, no dark/light variants)
 # login_page_image_filter = "brightness-50 grayscale"

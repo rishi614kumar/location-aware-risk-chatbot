@@ -9,3 +9,6 @@ python-dotenv
 sodapy
 tabulate
 xlrd>=2.0.1
+SQLAlchemy>=2.0
+aiosqlite
+greenlet
