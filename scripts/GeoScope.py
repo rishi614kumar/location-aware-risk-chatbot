@@ -132,7 +132,7 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit)
         vals = ",".join(f"'{p}'" for p in ids)
-        return f"Precinct IN ({vals})" if vals else None
+        return f"PCTs IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)

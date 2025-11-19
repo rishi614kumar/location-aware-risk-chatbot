@@ -12,7 +12,7 @@ NTA_PATH = os.getenv("NTA_PATH") # https://data.cityofnewyork.us/resource/9nt8-h
 CRIME_PATH = os.getenv("CRIME_PATH")
 
 FLATFILE_PATHS = {
-    "Crime": CRIME_PATH,
+    "Crime": "/Users/davinkey/Desktop/capstone/seven-major-felony-offenses-by-precinct-2000-2024.xls",
     "Sewer System Data": os.getenv("SEWER_SYSTEM_DATA_PATH"),
     # Add more flatfile dataset paths here
 }
