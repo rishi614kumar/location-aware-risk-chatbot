@@ -81,7 +81,131 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
 
     return list(units)
 
+# Helper functions to modularize dataset filter generation
+
+def resolve_bbls_from_addresses(addresses: List[Dict[str, Any]]) -> List[str]:
+    """Resolve BBLs from a list of address dicts. Deduplicated, order-preserving."""
+    resolved_bbls: List[str] = []
+    for record in addresses or []:
+        bbl = _resolve_single_bbl(record)
+        if bbl:
+            resolved_bbls.append(bbl)
+    # de-duplicate while preserving order
+    return list(dict.fromkeys(b for b in resolved_bbls if b))
+
+
+def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = True) -> List[str]:
+    """Aggregate surrounding BBLs for each resolved BBL when surrounding=True; otherwise return resolved list."""
+    if not resolved_bbls:
+        return []
+    if not surrounding:
+        return list(dict.fromkeys(resolved_bbls))
+
+    nearby_set = set()
+    for bbl in resolved_bbls:
+        try:
+            results = get_surrounding_bbls_from_bbl(
+                bbl=bbl,
+                mode="street",
+                include_self=True,
+            )
+            for item in results:
+                nearby_set.add(item)
+        except Exception as exc:
+            logger.warning(f"Surrounding lookup failed for {bbl}: {exc}")
+            nearby_set.add(bbl)
+    nearby_bbls = sorted(nearby_set)
+    logger.info(f"Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
+    return nearby_bbls
+
+
+def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional[str]:
+    """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
+    geo_unit = (geo_unit or "BBL").upper()
+    if not bbls_to_use:
+        return None
+
+    if geo_unit == "BBL":
+        vals = ",".join(f"'{b}'" for b in bbls_to_use)
+        return f"BBL IN ({vals})"
+
+    if geo_unit == "PRECINCT":
+        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        vals = ",".join(f"'{p}'" for p in ids)
+        return f"Precinct IN ({vals})" if vals else None
+
+    if geo_unit.startswith("NTA"):
+        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        vals = ",".join(f"'{n}'" for n in ids)
+        return f"nta2020 IN ({vals})" if vals else None
+
+    if geo_unit == "STREETSPAN":
+        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        vals = ",".join(f"'{s}'" for s in ids)
+        return f"SegmentID IN ({vals})" if vals else None
+
+    if geo_unit in ("LONLAT", "COORD"):
+        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        coords = [lonlat.split(',') for lonlat in ids]
+        conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
+        return conds or None
+
+    if geo_unit == "BBL_SPLIT":
+        boro_list, block_list, lot_list = [], [], []
+        for full_bbl in bbls_to_use:
+            try:
+                s = str(full_bbl)
+                boro = s[0]
+                block = s[1:6]
+                lot = s[6:]
+                boro_list.append(boro)
+                block_list.append(block)
+                lot_list.append(lot)
+            except Exception:
+                continue
+        if boro_list and block_list and lot_list:
+            boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
+            block_vals = ",".join(f"'{b}'" for b in sorted(set(block_list)))
+            lot_vals = ",".join(f"'{b}'" for b in sorted(set(lot_list)))
+            return (
+                f"Borough IN ({boro_vals}) "
+                f"AND Block IN ({block_vals}) "
+                f"AND Lot IN ({lot_vals})"
+            )
+        return None
+
+    logger.warning(f"Unknown geo_unit '{geo_unit}'; no where clause built.")
+    return None
+
+
+def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_bbls: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Build the filter dict per dataset in handler using resolved and nearby BBLs per DATASET_CONFIG."""
+    filters: Dict[str, Dict[str, Any]] = {}
+    for ds in handler:
+        ds_name = ds.name
+        ds_conf = DATASET_CONFIG.get(ds_name, {})
+        geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+        mode = ds_conf.get("mode", "street")
+        want_surrounding = ds_conf.get("surrounding", False)
+        try:
+            bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
+            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use)
+            if where_str:
+                filters[ds_name] = {"where": where_str, "limit": 1000}
+                logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
+            else:
+                filters[ds_name] = {"limit": 200}
+                logger.warning(f"No valid filter for {ds_name}; using preview mode.")
+        except NotImplementedError:
+            logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
+            filters[ds_name] = {"limit": 0}
+        except Exception as e:
+            logger.error(f"Unexpected error on {ds_name}: {e}")
+            filters[ds_name] = {"limit": 100}
+    return filters
+
 def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=True) -> Dict[str, Dict[str, Any]]:
+    """Orchestrator that delegates to modular helpers for clarity and testability."""
     filters: Dict[str, Dict[str, Any]] = {}
 
     if not addresses:
@@ -90,14 +214,8 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
             filters[ds.name] = {"limit": 200}
         return filters
 
-    # --- Step 1: resolve each address → BBL ---
-    resolved_bbls: List[str] = []
-    for record in addresses:
-        bbl = _resolve_single_bbl(record)
-        if bbl:
-            resolved_bbls.append(bbl)
-
-    resolved_bbls = list(dict.fromkeys(bbl for bbl in resolved_bbls if bbl))
+    # Step 1: Resolve addresses to BBLs
+    resolved_bbls = resolve_bbls_from_addresses(addresses)
 
     if not resolved_bbls:
         logger.warning("No BBLs resolved from provided addresses; using preview mode.")
@@ -105,116 +223,11 @@ def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=Tr
             filters[ds.name] = {"limit": 200}
         return filters
 
-    # --- Step 2: find surrounding BBLs ---
-    if surrounding:
-        nearby_set = set()
-        for bbl in resolved_bbls:
-            try:
-                results = get_surrounding_bbls_from_bbl(
-                    bbl=bbl,
-                    mode="street",
-                    include_self=True,
-                )
-                for item in results:
-                    nearby_set.add(item)
-            except Exception as exc:
-                logger.warning(f"Surrounding lookup failed for {bbl}: {exc}")
-                nearby_set.add(bbl)
-        nearby_bbls = sorted(nearby_set)
-        logger.info(f"Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
-        try:
-            nearby_bbls = list(get_surrounding_bbls_from_bbl(
-                bbl=bbl,
-                mode="street",      # or "radius"
-                include_self=True
-            ))
-            logger.info(f"Found {len(nearby_bbls)} surrounding BBLs")
-        except Exception as e:
-            logger.warning(f"Surrounding lookup failed: {e}")
-            nearby_bbls = [bbl]
-    else:
-        nearby_bbls = [bbl]
+    # Step 2: Aggregate surrounding BBLs (optional)
+    nearby_bbls = aggregate_surrounding_bbls(resolved_bbls, surrounding=surrounding)
 
-    # --- Step 3: build dataset filters ---
-    for ds in handler:
-        ds_name = ds.name
-        ds_conf = DATASET_CONFIG.get(ds_name, {})
-        geo_unit = ds_conf.get("geo_unit", "BBL").upper()
-        mode = ds_conf.get("mode", "street")
-        want_surrounding = ds_conf.get("surrounding", False)
-
-        where_str = None
-
-        try:
-            if not want_surrounding:
-                bbls_to_use = [bbl]
-            else:
-                bbls_to_use = nearby_bbls
-
-            filter_ids = get_surrounding_units(bbls_to_use, geo_unit)
-            if geo_unit == "BBL":
-                vals = ",".join(f"'{b}'" for b in filter_ids)
-                where_str = f"BBL IN ({vals})"
-
-            elif geo_unit == "PRECINCT":
-                vals = ",".join(f"'{p}'" for p in filter_ids)
-                where_str = f"Precinct IN ({vals})"
-
-            elif geo_unit.startswith("NTA"):
-                vals = ",".join(f"'{n}'" for n in filter_ids)
-                where_str = f"NTA IN ({vals})"
-
-            elif geo_unit == "STREETSPAN":
-                vals = ",".join(f"'{s}'" for s in filter_ids)
-                where_str = f"SegmentID IN ({vals})"
-
-            elif geo_unit in ("LONLAT", "COORD"):
-                coords = [lonlat.split(',') for lonlat in filter_ids]
-                conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
-                where_str = conds
-
-            elif geo_unit == "BBL_SPLIT":
-                boro_list, block_list, lot_list = [], [], []
-                for full_bbl in nearby_bbls:
-                    try:
-                        s = str(full_bbl)
-                        boro = s[0]
-                        block = s[1:6]
-                        lot = s[6:]
-                        boro_list.append(boro)
-                        block_list.append(block)
-                        lot_list.append(lot)
-                    except Exception:
-                        continue
-
-                if boro_list and block_list and lot_list:
-                    boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
-                    block_vals = ",".join(f"'{b}'" for b in sorted(set(block_list)))
-                    lot_vals = ",".join(f"'{b}'" for b in sorted(set(lot_list)))
-                    where_str = (
-                        f"Borough IN ({boro_vals}) "
-                        f"AND Block IN ({block_vals}) "
-                        f"AND Lot IN ({lot_vals})"
-                    )
-                    logger.info(f"Applied split-BBL filter on {ds_name}: {len(block_list)} lots")
-
-            else:
-                logger.warning(f"Unknown geo_unit '{geo_unit}' for {ds_name}; fallback to preview.")
-
-            # Finalize filter
-            if where_str:
-                filters[ds_name] = {"where": where_str, "limit": 1000}
-                logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
-            else:
-                filters[ds_name] = {"limit": 200}
-                logger.warning(f"No valid filter for {ds_name}; using preview mode.")
-
-        except NotImplementedError:
-            logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
-            filters[ds_name] = {"limit": 0}
-        except Exception as e:
-            logger.error(f"Unexpected error on {ds_name}: {e}")
-            filters[ds_name] = {"limit": 100}
+    # Step 3: Build dataset filters
+    filters = build_dataset_filters_for_handler(handler, resolved_bbls, nearby_bbls)
 
     # Log the final filters dict for debugging
     logger.info(f"Final dataset filters returned: {filters}")

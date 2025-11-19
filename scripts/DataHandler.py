@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 import pandas as pd
 import geopandas as gpd
 import os
+import time
 from config import settings
+from config.logger import logger
 
 # Configuration has been moved to config.settings; create local aliases for compatibility.
 DATASET_DESCRIPTIONS: Dict[str, str] = settings.DATASET_DESCRIPTIONS
@@ -92,7 +94,9 @@ class DataSet:
         }
 
     def fetch_data_frame(self, where=None, limit=None) -> pd.DataFrame:
-        """Fetch a pandas DataFrame for this dataset using its configured source, with optional filtering."""
+        """Fetch a pandas DataFrame for this dataset using its configured source, with optional filtering.
+        Adds retry/backoff for Socrata 503 throttling and supports APP TOKEN via env SOCRATA_APP_TOKEN.
+        """
         api_id = DATASET_API_IDS.get(self.name)
         if api_id is None:
             path = settings.FLATFILE_PATHS.get(self.name)
@@ -100,10 +104,11 @@ class DataSet:
             if not path:
                 raise FileNotFoundError(f"No path configured for flatfile dataset '{self.name}'")
             df = load_flatfile_dataset(self.name, path, layer=layer)
-            # apply filtering if 'where' or 'limit' is provided
             if where:
-                # simple pandas query
-                df = df.query(where)
+                try:
+                    df = df.query(where)
+                except Exception:
+                    pass
             if limit is not None:
                 df = df.head(limit)
             return df
@@ -116,8 +121,26 @@ class DataSet:
             params["limit"] = limit
         if where:
             params["where"] = where
-        results = client.get(api_id, **params)
-        return pd.DataFrame.from_records(results)
+
+        retries = 3
+        delay = 1.0
+        last_err = None
+        for attempt in range(retries):
+            try:
+                results = client.get(api_id, **params)
+                return pd.DataFrame.from_records(results)
+            except Exception as e:
+                last_err = e
+                msg = str(e)
+                if "503" in msg or "throttling" in msg.lower():
+                    logger.warning(f"Attempt {attempt+1}/{retries} 503/throttle for {self.name}; retrying in {delay:.1f}s")
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                logger.error(f"Non-retryable error for {self.name}: {e}")
+                break
+        logger.error(f"Failed to fetch {self.name} after {retries} attempts: {last_err}")
+        return pd.DataFrame()  # empty fallback
 
     @property
     def df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:

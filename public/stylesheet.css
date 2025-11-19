@@ -1,5 +1,5 @@
 /* ============================================
-   CHAINLIT — Columbia Theme
+   CHAINLIT — Columbia Theme (Cleaned)
    Palette
      Columbia Blue: #9BDDFF
      Sky Tint:      #E5F6FF
@@ -11,7 +11,29 @@
      UI/Body:   clean sans
    ============================================ */
 
-:root {
+/* --- Disable Chainlit's light/dark background tokens --- */
+html[data-theme="light"],
+html[data-theme="dark"],
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --bg-color: transparent !important;
+  --bg-color-secondary: transparent !important;
+  --surface-color: transparent !important;
+  --container-color: transparent !important;
+
+  /* Some installs use these names instead */
+  --color-background: transparent !important;
+  --color-surface: transparent !important;
+
+  color-scheme: light !important;
+}
+
+/* --- Core CSS variables & global base --- */
+:root,
+html {
+  background: transparent !important;
+  background-color: transparent !important;
+
   /* Core palette */
   --cu-blue: #9BDDFF;
   --cu-blue-200: #bfe6ff;
@@ -53,42 +75,97 @@
   /* Animations */
   --easing: cubic-bezier(.2,.8,.2,1);
   --speed: 180ms;
-}
+  --speed-fast: 140ms;
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #071320;
-    --surface: #0d1a2b;
-    --text: #E8F3FF;
-    --muted: #B6CBE0;
-    --divider: #19324A;
-    --glass: rgba(10, 24, 40, 0.55);
-    --glass-strong: rgba(15, 31, 52, 0.72);
-    --shadow-xs: 0 2px 10px rgba(0,0,0,0.45);
-    --shadow-sm: 0 10px 26px rgba(0,0,0,0.45);
-    --shadow-md: 0 20px 48px rgba(0,0,0,0.5);
-  }
+  /* Extras */
+  --radius-xl: 22px;
+  --shadow-lg: 0 24px 60px rgba(0, 51, 102, 0.18);
+  --ring: color-mix(in oklab, var(--cu-deep) 35%, white);
+  --ring-muted: color-mix(in oklab, var(--cu-blue) 20%, transparent);
+  --container-max: 980px;
+  --gutter: 1.1rem;
 }
 
 /* --------------------------------------------
    Page background & global type
 --------------------------------------------- */
-html, body {
+html,
+body {
   height: 100%;
 }
 
-body {
-  background: radial-gradient(1200px 900px at 15% -10%, var(--cu-blue-50) 0%, transparent 60%),
-              radial-gradient(1400px 1100px at 110% 110%, var(--cu-blue) 0%, transparent 70%),
-              linear-gradient(135deg, var(--cu-blue) 0%, var(--cu-blue-50) 100%) !important;
+body,
+body[data-theme="light"],
+body[data-theme="dark"],
+body.chainlit-light,
+body.chainlit-dark {
+  background:
+    radial-gradient(1200px 900px at 15% -10%, var(--cu-blue-50) 0%, transparent 60%),
+    radial-gradient(1400px 1100px at 110% 110%, var(--cu-blue) 0%, transparent 70%),
+    linear-gradient(135deg, var(--cu-blue) 0%, var(--cu-blue-50) 100%) !important;
   background-attachment: fixed;
+  background-color: transparent !important;
   color: var(--text) !important;
   font-family: var(--font-ui) !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Layout containers should not paint over the gradient */
+main,
+#root,
+#root > div,
+.cl-app,
+.cl-page,
+.cl-main,
+.cl-body,
+.cl-chat-layout,
+.cl-chat,
+.cl-chat-container,
+.cl-content,
+.cl-message-list {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* --------------------------------------------
+   Hide built-in toggles we don't want
+--------------------------------------------- */
+/* Hide tiny login-page logo in the top-left */
+.cl-login-page img[alt="logo"],
+.cl-login-page img[src*="logo_light"],
+.cl-login-page img[src*="logo_dark"] {
+  display: none !important;
+}
+
+
+/* Theme toggle */
+[data-testid="theme-toggle"],
+button[aria-label="Toggle theme"] {
+  display: none !important;
+}
+
+/* --------------------------------------------
+   Hide built-in header buttons: Readme + theme
+--------------------------------------------- */
+
+/* Readme pill in the top-right */
+button[aria-label="Readme"],
+button[data-testid="readme-button"],
+a[aria-label="Readme"],
+a[data-testid="readme-button"] {
+  display: none !important;
+}
+
+/* Light / dark mode toggle in the top-right */
+[data-testid="theme-toggle"],
+[data-testid="dark-mode-toggle"],
+button[aria-label*="Theme"],
+button[aria-label*="theme"],
+button[aria-label*="Dark mode"],
+button[aria-label*="Light mode"] {
+  display: none !important;
+}
 /* --------------------------------------------
    Header
 --------------------------------------------- */
@@ -100,12 +177,30 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--divider) 80%, transparent);
   background: linear-gradient(180deg, var(--glass-strong), var(--glass));
   backdrop-filter: saturate(130%) blur(10px);
-  border-bottom: 2px solid var(--divider);
   box-shadow: var(--shadow-sm);
   padding: 0 1.25rem;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.cl-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cu-blue) 30%,
+    var(--cu-deep) 70%,
+    transparent 100%
+  );
+  opacity: .35;
+  pointer-events: none;
 }
 
 .cl-header .title,
@@ -127,17 +222,76 @@ body {
   transform: translateY(1px);
 }
 
+/* Optional landing return buttons */
+.cu-landing-return {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  height: 34px !important;
+  padding: 0 .85rem !important;
+  font-size: .85rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+
+.cu-landing-return::before {
+  content: "⟳";
+  font-size: .8rem;
+  opacity: .7;
+}
+
+.cu-landing-return-floating {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 9000;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  height: 40px;
+  padding: 0 1rem;
+  font-size: .9rem;
+  font-weight: 600;
+  border-radius: 18px;
+  border: 1px solid color-mix(in oklab, var(--divider) 70%, transparent);
+  background: linear-gradient(
+    180deg,
+    var(--surface),
+    color-mix(in oklab, var(--surface) 70%, var(--cu-blue-50))
+  );
+  color: var(--cu-deep);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.cu-landing-return-floating::before {
+  content: "⟳";
+  font-size: .9rem;
+  opacity: .7;
+}
+
 /* --------------------------------------------
    Sidebar
 --------------------------------------------- */
 .cl-sidebar {
   width: var(--sidebar-w);
+  border-right: 1px solid color-mix(in oklab, var(--divider) 80%, transparent);
   background: linear-gradient(180deg, var(--glass-strong), var(--glass));
   backdrop-filter: blur(12px) saturate(135%);
-  border-right: 1px solid var(--divider);
   box-shadow: var(--shadow-xs);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   color: var(--text) !important;
+}
+
+.cl-sidebar a,
+.cl-sidebar button {
+  border-radius: 10px;
+}
+
+.cl-sidebar a:hover,
+.cl-sidebar button:hover {
+  background: color-mix(in oklab, var(--cu-blue-50) 55%, transparent);
 }
 
 .cl-sidebar .section-title {
@@ -153,6 +307,8 @@ body {
 .cl-chat {
   background: transparent !important;
   padding: 1.25rem;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
 }
 
 /* Message cards (glassmorphism) */
@@ -160,27 +316,58 @@ body {
   background: var(--surface) !important;
   border: 1px solid var(--divider) !important;
   color: var(--text) !important;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   padding: 1rem 1.1rem;
   margin: 0 0 1rem 0;
-  transition: transform var(--speed) var(--easing), box-shadow var(--speed) var(--easing);
+  transition:
+    transform var(--speed) var(--easing),
+    box-shadow var(--speed) var(--easing);
+  max-width: var(--container-max);
+  margin-left: auto;
+  margin-right: auto;
+  border-color: color-mix(in oklab, var(--divider) 85%, transparent) !important;
 }
 
 .cl-message:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
 /* Role tinting */
-.cl-message.assistant { border-left: 4px solid var(--cu-deep); }
-.cl-message.user       { border-left: 4px solid var(--cu-blue); }
-.cl-message.system     { border-left: 4px solid var(--muted);   }
-.cl-message.tool       { border-left: 4px solid var(--warning); }
+.cl-message.assistant {
+  background:
+    linear-gradient(0deg, color-mix(in oklab, var(--cu-blue-50) 12%, transparent), transparent),
+    var(--surface) !important;
+  border-left: 4px solid var(--cu-deep);
+}
+
+.cl-message.user {
+  background:
+    linear-gradient(0deg, color-mix(in oklab, var(--cu-blue-200) 10%, transparent), transparent),
+    var(--surface) !important;
+  border-left: 4px solid var(--cu-blue);
+}
+
+.cl-message.system {
+  border-left: 4px solid var(--muted);
+}
+
+.cl-message.tool {
+  border-left: 4px solid var(--warning);
+}
+
+/* Tighter grouping for consecutive messages of same role */
+.cl-message.user + .cl-message.user,
+.cl-message.assistant + .cl-message.assistant {
+  margin-top: .5rem;
+}
 
 /* Avatars */
 .cl-avatar {
-  box-shadow: 0 0 0 3px var(--surface), 0 6px 16px rgba(0,0,0,.08);
+  box-shadow:
+    0 0 0 3px var(--surface),
+    0 6px 16px rgba(0,0,0,.08);
   border-radius: 50%;
 }
 
@@ -192,47 +379,87 @@ body {
 /* --------------------------------------------
    Inputs / Composer
 --------------------------------------------- */
-.cl-composer, .cl-footer {
+.cl-composer,
+.cl-footer {
   background: linear-gradient(180deg, var(--glass-strong), var(--glass));
   backdrop-filter: blur(10px) saturate(135%);
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid color-mix(in oklab, var(--divider) 80%, transparent);
+  border-radius: 14px 14px 0 0;
   padding: .85rem 1rem;
   box-shadow: var(--shadow-sm);
 }
 
-.cl-input, textarea, input[type="text"] {
+.cl-input,
+textarea,
+input[type="text"] {
   background: var(--surface);
   border: 1px solid var(--divider);
   color: var(--text);
-  border-radius: var(--radius-md);
-  padding: .85rem 1rem;
+  border-radius: 14px;
+  padding: .9rem 1rem;
   outline: none;
-  transition: border var(--speed) var(--easing), box-shadow var(--speed) var(--easing);
+  transition:
+    border var(--speed-fast) var(--easing),
+    box-shadow var(--speed-fast) var(--easing),
+    transform var(--speed-fast) var(--easing);
   box-shadow: inset 0 1px 2px rgba(0,0,0,.025);
 }
 
-.cl-input:focus, textarea:focus, input[type="text"]:focus {
+.cl-input::placeholder,
+textarea::placeholder,
+input[type="text"]::placeholder {
+  color: color-mix(in oklab, var(--muted) 85%, var(--text));
+}
+
+.cl-input:focus,
+textarea:focus,
+input[type="text"]:focus {
   border-color: var(--cu-deep);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--cu-deep) 20%, transparent);
+  box-shadow:
+    0 0 0 3px var(--ring-muted),
+    0 0 0 6px color-mix(in oklab, var(--cu-deep) 15%, transparent);
 }
 
 /* Send button + primary buttons */
-button, .send-btn, .cl-button-primary {
+button,
+.send-btn,
+.cl-button-primary {
   background: linear-gradient(180deg, var(--cu-navy), #022e5c) !important;
   color: #fff !important;
   border: 0 !important;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   font-weight: 700 !important;
-  padding: .7rem 1.1rem !important;
-  box-shadow: 0 8px 18px rgba(0, 51, 102, 0.24);
-  transition: transform var(--speed) var(--easing), box-shadow var(--speed) var(--easing), background var(--speed) var(--easing);
+  padding: 0 0.85rem !important;
+  height: 36px !important;
+  font-size: .9rem !important;
+  box-shadow: 0 10px 22px rgba(0, 51, 102, 0.22);
+  transition:
+    transform var(--speed) var(--easing),
+    box-shadow var(--speed) var(--easing),
+    background var(--speed) var(--easing);
 }
 
-button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 30px rgba(0, 51, 102, 0.30);
+button:hover,
+.send-btn:hover,
+button:focus-visible,
+.send-btn:focus-visible {
+  transform: translateY(-1.5px);
+  box-shadow: 0 16px 34px rgba(0, 51, 102, 0.32);
   background: linear-gradient(180deg, var(--cu-deep), #024d8f) !important;
   outline: none !important;
+}
+
+button:active,
+.send-btn:active {
+  transform: translateY(0) scale(.99);
+  transition-duration: 60ms;
+}
+
+button:disabled,
+.send-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Secondary/ghost buttons */
@@ -242,13 +469,18 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
   border: 1px solid var(--divider) !important;
   border-radius: 12px !important;
 }
-.cl-button-ghost:hover { background: color-mix(in oklab, var(--cu-blue-50) 60%, transparent); }
+
+.cl-button-ghost:hover {
+  background: color-mix(in oklab, var(--cu-blue-50) 60%, transparent);
+}
 
 /* --------------------------------------------
    Markdown & code
 --------------------------------------------- */
-.cl-message pre, pre {
-  background: #0f2136;
+.cl-message pre,
+pre {
+  background: linear-gradient(180deg, #0f2136, #0b1c2e);
+  border-color: #17324c;
   color: #e9f2ff;
   border-radius: var(--radius-md);
   padding: 1rem 1.1rem;
@@ -256,15 +488,22 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
   border: 1px solid #18324c;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
 }
-.cl-message code, code {
+
+.cl-message code,
+code {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: .92rem;
 }
-.cl-message p, .cl-message li {
+
+.cl-message p,
+.cl-message li {
   line-height: 1.6;
   font-size: 1rem;
 }
-.cl-message h1, .cl-message h2, .cl-message h3 {
+
+.cl-message h1,
+.cl-message h2,
+.cl-message h3 {
   font-family: var(--font-serif);
   color: var(--cu-navy);
   margin: .2rem 0 .4rem;
@@ -280,6 +519,10 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
   background: var(--cu-blue-50);
   color: var(--cu-deep);
   border: 1px solid var(--divider);
+  letter-spacing: .2px;
+  box-shadow:
+    0 1px 0 rgba(0,0,0,.03),
+    0 6px 14px rgba(0, 51, 102, 0.08);
 }
 
 /* --------------------------------------------
@@ -290,9 +533,14 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.cl-message a:hover { color: color-mix(in oklab, var(--cu-deep) 85%, var(--cu-blue)); }
 
-.cl-file, .cl-attachment, .cl-card {
+.cl-message a:hover {
+  color: color-mix(in oklab, var(--cu-deep) 85%, var(--cu-blue));
+}
+
+.cl-file,
+.cl-attachment,
+.cl-card {
   background: var(--surface);
   border: 1px solid var(--divider);
   border-radius: var(--radius-md);
@@ -300,18 +548,27 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
 }
 
 /* Scrollbars */
-::-webkit-scrollbar { width: 10px; height: 10px; background: var(--cu-blue-50); }
-::-webkit-scrollbar-thumb { background: var(--cu-blue); border-radius: 8px; border: 2px solid var(--cu-blue-50); }
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: var(--cu-blue-50);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cu-blue);
+  border-radius: 8px;
+  border: 2px solid var(--cu-blue-50);
+}
 
 /* Focus rings (keyboard a11y) */
 *:focus-visible {
-  outline: 3px solid color-mix(in oklab, var(--cu-blue) 60%, white);
+  outline: 3px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 10px;
 }
 
 /* Tooltips/Modals */
-.cl-tooltip, .cl-modal {
+.cl-tooltip,
+.cl-modal {
   background: var(--surface);
   border: 1px solid var(--divider);
   border-radius: var(--radius-md);
@@ -323,18 +580,43 @@ button:hover, .send-btn:hover, button:focus-visible, .send-btn:focus-visible {
   .cl-message {
     animation: cu-float-in .25s var(--easing) both;
   }
+
   @keyframes cu-float-in {
-    from { opacity: 0; transform: translateY(4px) scale(.995); }
-    to   { opacity: 1; transform: translateY(0)   scale(1); }
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(.995);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 }
 
 /* Compact on small screens */
 @media (max-width: 768px) {
-  :root { --sidebar-w: 0px; }
-  .cl-header { height: calc(var(--header-h) - 6px); }
-  .cl-chat { padding: .75rem; }
-  .cl-message { border-radius: 14px; padding: .9rem .95rem; }
+  :root {
+    --sidebar-w: 0px;
+  }
+
+  .cl-header {
+    height: calc(var(--header-h) - 6px);
+    border-radius: 0 0 14px 14px;
+  }
+
+  .cl-chat {
+    padding: .75rem;
+  }
+
+  .cl-message {
+    border-radius: 16px;
+    padding: .9rem .95rem;
+  }
+
+  .cl-composer,
+  .cl-footer {
+    border-radius: 14px 14px 0 0;
+  }
 }
 
 /* High-contrast helper (add .hc to <body> to force) */
@@ -345,3 +627,16 @@ body.hc {
   --muted: #163a59;
 }
 
+/* Reduced motion: tone down transforms */
+@media (prefers-reduced-motion: reduce) {
+  .cl-message:hover,
+  button:hover,
+  .send-btn:hover {
+    transform: none;
+  }
+}
+
+/* Hide the tiny broken logo on the login page */
+img[alt="logo"] {
+  display: none !important;
+}
