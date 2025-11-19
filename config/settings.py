@@ -12,7 +12,7 @@ NTA_PATH = os.getenv("NTA_PATH") # https://data.cityofnewyork.us/resource/9nt8-h
 CRIME_PATH = os.getenv("CRIME_PATH")
 
 FLATFILE_PATHS = {
-    "Crime": "/Users/davinkey/Desktop/capstone/seven-major-felony-offenses-by-precinct-2000-2024.xls",
+    "Crime": CRIME_PATH,
     "Sewer System Data": os.getenv("SEWER_SYSTEM_DATA_PATH"),
     # Add more flatfile dataset paths here
 }
@@ -312,11 +312,20 @@ DATASET_CONFIG = {
     "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street", "surrounding":True},
     "Crime": {"geo_unit": "PRECINCT", "mode": "street","surrounding":False},
     "Sewer System Data": {"geo_unit": "", "mode": "radius","surrounding":False},
-    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius","surrounding":True},
+    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT","Borough":"MANHATTAN", "mode": "radius","surrounding":True},
     "Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
     "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
     # Add more dataset configurations as needed
 }
+
+BORO_CODE_MAP = {
+    "1": "MANHATTAN",
+    "2": "BRONX",
+    "3": "BROOKLYN",
+    "4": "QUEENS",
+    "5": "STATEN ISLAND"
+}
+
 
 # LLM Prompting for returning datasets
 SYS_MULTI = f"""Classify the user's question into one or more of these categories:

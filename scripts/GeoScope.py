@@ -12,7 +12,7 @@ from adapters.coords import get_lonlat_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl
-from config.settings import DATASET_CONFIG
+from config.settings import DATASET_CONFIG, BORO_CODE_MAP
 from config.logger import logger
 
 def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
@@ -119,7 +119,7 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
     return nearby_bbls
 
 
-def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional[str]:
+def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str], borough_type: str) -> Optional[str]:
     """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
     geo_unit = (geo_unit or "BBL").upper()
     if not bbls_to_use:
@@ -132,7 +132,7 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit)
         vals = ",".join(f"'{p}'" for p in ids)
-        return f"PCTs IN ({vals})" if vals else None
+        return f"PCT in [{vals}]" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)
@@ -158,6 +158,8 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
                 boro = s[0]
                 block = s[1:6]
                 lot = s[6:]
+                if borough_type.isalpha():
+                    boro = BORO_CODE_MAP.get(boro, boro)
                 boro_list.append(boro)
                 block_list.append(block)
                 lot_list.append(lot)
@@ -185,11 +187,12 @@ def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_
         ds_name = ds.name
         ds_conf = DATASET_CONFIG.get(ds_name, {})
         geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+        borough_type = ds_conf.get("Borough") if geo_unit == "BBL_SPLIT" else None
         mode = ds_conf.get("mode", "street")
         want_surrounding = ds_conf.get("surrounding", False)
         try:
             bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
-            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use)
+            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, borough_type)
             if where_str:
                 filters[ds_name] = {"where": where_str, "limit": 1000}
                 logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
