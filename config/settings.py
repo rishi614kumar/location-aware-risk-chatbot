@@ -152,7 +152,7 @@ DATASET_API_IDS = {
     "NYC OpenData PLUTO" : "64uk-42ks",
     "NYC OpenData Automated Traffic Volume Counts" : "7ym2-wayt",
     "NYC OpenData Motor Vehicle Collisions" : "h9gi-nx95",
-    "DOB Permits" : "ipu4-2q9a",
+    "DOB permits" : "ipu4-2q9a",
     "Asbestos Control Program" : "vq35-j9qm",
     "Digital City Map Shapefile" : "y23c-72fa",
     "Historic Districts map" : "skyk-mpzq",
@@ -312,18 +312,24 @@ DATASET_CONFIG = {
     "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street", "surrounding":True},
     "Crime": {"geo_unit": "PRECINCT", "mode": "street","surrounding":False},
     "Sewer System Data": {"geo_unit": "", "mode": "radius","surrounding":False},
-    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT","Borough":"MANHATTAN", "mode": "radius","surrounding":True},
+    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT","Borough":"M", "cols": {"block": "00853", "lot": "0002"},"mode": "radius","surrounding":True},
     "Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
     "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
+    "DOB permits": {"geo_unit": "BBL_SPLIT","Borough":"M","Borough_form":0,"cols": {"block": "00853", "lot": "00002"},"mode": "street","surrounding":True},
+    "DOB NOW: Build - Job Application Findings": {"geo_unit": "BBL","mode": "street","surrounding":True},
+    "NYC OpenData Zoning and Tax Lot Database": {"geo_unit": "BBL","mode": "radius","surrounding":True},
+    "City Owned and Leased Property": {"geo_unit": "BBL","mode": "radius","surrounding":True},
+    "Water and Sewer Permits": {"geo_unit": "BBL_SPLIT","Borough":"M","Borough_form":1,"cols": {"block": "00853", "lot": "0002"},"col_names":{"borough": "propertyborough","block": "propertyblock", "lot":"propertylot"},"mode": "street","surrounding":True}
+
     # Add more dataset configurations as needed
 }
 
 BORO_CODE_MAP = {
-    "1": "MANHATTAN",
-    "2": "BRONX",
-    "3": "BROOKLYN",
-    "4": "QUEENS",
-    "5": "STATEN ISLAND"
+    "1": ["MANHATTAN","Manhattan"],
+    "2": ["BRONX","Bronx"],
+    "3": ["BROOKLYN","Brooklyn"],
+    "4": ["QUEENS","Queens"],
+    "5": ["STATEN ISLAND","Staten Island"]
 }
 
 
