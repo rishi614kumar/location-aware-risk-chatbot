@@ -146,15 +146,36 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str], borough_typ
 
     if geo_unit in ("LONLAT", "COORD"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)
-        coords = [lonlat.split(',') for lonlat in ids]
-        conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
+        coords = [tuple(map(float, lonlat.split(','))) for lonlat in ids]
+        geometry_col = col_name.get("geometry", None)
+        conds = " OR ".join([
+            f"within_circle({geometry_col},{lat}, {lon}, 100)"
+            for lon, lat in coords
+        ])
         return conds or None
+    
+    if geo_unit == "BOROUGH":
+        boro_list = []
+        for full_bbl in bbls_to_use:
+            try:
+                s = str(full_bbl)
+                boro = s[0]
+                if borough_type.isalpha():
+                    boro_options = BORO_CODE_MAP.get(boro, [boro])
+                    boro = boro_options[borough_form] if borough_form < len(boro_options) else boro
+                boro_list.append(boro)
+            except Exception:
+                continue
+        if boro_list:
+            borough_col = col_name.get("borough", "borough")
+            boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
+            return f"{borough_col} IN ({boro_vals})"
+        return None
 
     if geo_unit == "BBL_SPLIT":
         boro_list, block_list, lot_list = [], [], []
         col_lot = col_digit.get("lot", "0002")
         adding_zero = True if len(col_lot) == 5 else False
-
         for full_bbl in bbls_to_use:
             try:
                 s = str(full_bbl)
@@ -196,7 +217,7 @@ def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_
         ds_name = ds.name
         ds_conf = DATASET_CONFIG.get(ds_name, {})
         geo_unit = ds_conf.get("geo_unit", "BBL").upper()
-        borough_type = ds_conf.get("Borough")[0] if geo_unit == "BBL_SPLIT" else None
+        borough_type = ds_conf.get("Borough", "")
         borough_form = ds_conf.get("Borough_form", 0) 
         col_name = ds_conf.get("col_names", {}) 
         col_digit = ds_conf.get("cols", {})
