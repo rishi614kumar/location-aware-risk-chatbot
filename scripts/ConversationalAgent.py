@@ -9,13 +9,12 @@ from prompts.app_prompts import (
     get_conversational_meta_prompt,
     get_followup_prompt,
     get_loading_datasets_prompt,
-    get_conversational_fallback_prompt,
-    get_reuse_parsed_decision_prompt
+    get_conversational_fallback_prompt
 )
 from llm.LLMParser import route_query_to_datasets_multi
 from config.logger import logger
 from scripts.ConversationalUnit import (
-    DecideModeUnit, DecideReuseParsedUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
+    DecideModeUnit, DecideReuseAddressesUnit, DecideReuseDatasetsUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
     DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit,
     ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit, BuildDatasetFiltersUnit,
     SurroundingDecisionUnit
@@ -30,7 +29,8 @@ class ConversationalAgent:
         # Instantiate units
         self.units = {
             "decide_mode": DecideModeUnit(self.llm_chat),
-            "decide_reuse_parsed": DecideReuseParsedUnit(self.llm_chat),
+            "decide_reuse_addresses": DecideReuseAddressesUnit(self.llm_chat),
+            "decide_reuse_datasets": DecideReuseDatasetsUnit(self.llm_chat),
             "parse_query": ParseQueryUnit(),
             "parsed_result_format": ParsedResultFormatUnit(),
             "data_preview": DataPreviewUnit(self.llm_chat),
@@ -70,17 +70,42 @@ class ConversationalAgent:
             self.last_context = context  # store final context
             return
 
-        # Decide reuse / reparse
-        context = await self.units["decide_reuse_parsed"].run(context)
-        reuse_decision = context["reuse_decision"]
-        logger.info(f"Reuse parsed decision: {reuse_decision}")
-        if reuse_decision == "reuse" and self.last_parsed_result:
-            context["parsed_result"] = self.last_parsed_result
-            logger.info("Reusing last parsed datasets and addresses.")
-        else:
+        # Decide reuse of addresses and datasets
+        context = await self.units["decide_reuse_addresses"].run(context)
+        reuse_addresses_decision = context["reuse_addresses_decision"]
+        logger.info(f"Reuse addresses decision: {reuse_addresses_decision}")
+
+        context = await self.units["decide_reuse_datasets"].run(context)
+        reuse_datasets_decision = context["reuse_datasets_decision"]
+        logger.info(f"Reuse datasets decision: {reuse_datasets_decision}")
+
+        need_fresh_parse = (
+            not self.last_parsed_result
+            or reuse_addresses_decision != "reuse"
+            or reuse_datasets_decision != "reuse"
+        )
+
+        if need_fresh_parse:
             context = await self.units["parse_query"].run(context)
-            self.last_parsed_result = context["parsed_result"]
-            logger.info(f"Parsed result: {context['parsed_result']}")
+            parsed_result = context["parsed_result"]
+            if reuse_addresses_decision == "reuse" and self.last_parsed_result:
+                parsed_result["address"] = list(self.last_parsed_result.get("address") or [])
+            if reuse_datasets_decision == "reuse" and self.last_parsed_result:
+                parsed_result["dataset_names"] = list(self.last_parsed_result.get("dataset_names") or [])
+                source_categories = (
+                    self.last_parsed_result.get("categories")
+                    or parsed_result.get("categories")
+                    or []
+                )
+                parsed_result["categories"] = list(source_categories)
+            context["parsed_result"] = parsed_result
+            self.last_parsed_result = parsed_result
+            logger.info(f"Parsed result: {parsed_result}")
+        else:
+            context["parsed_result"] = self.last_parsed_result or {}
+            logger.info("Reusing last parsed datasets and addresses without reparsing.")
+
+        context["last_parsed_result"] = self.last_parsed_result
 
         # Format & yield parsed result
         context = await self.units["parsed_result_format"].run(context)

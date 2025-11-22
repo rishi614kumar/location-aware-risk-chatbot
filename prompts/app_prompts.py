@@ -113,13 +113,25 @@ def get_show_data_decision_prompt(user_text, chat_history, parsed_result):
         f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and parsed result: '{parsed_result}', decide if the user is requesting to see the actual data preview. Respond with 'show_data' if they want to see it, or 'hide_data' if they do not'.)"
     )
 
-def get_reuse_parsed_decision_prompt(user_text, chat_history, last_parsed_result):
-    """
-    Prompt for LLM to decide if the last parsed datasets/addresses should be reused or reparsed.
-    Respond with either 'reuse' or 'reparse'.
-    """
+def get_reuse_address_decision_prompt(user_text, chat_history, last_addresses):
+    """Prompt for deciding whether to reuse previously parsed addresses."""
+    addresses_text = ", ".join(a.get('raw', '') or str(a) for a in last_addresses) if last_addresses else "None"
     return (
-        f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and the last parsed result: '{last_parsed_result}', decide if you should reuse the last parsed datasets and addresses, or reparse from the new query. Respond with either 'reuse' or 'reparse'.)"
+        f"$(META-PROMPT: The user's new message is: '{user_text}'. Chat history: '{chat_history}'."
+        f" The last known addresses are: '{addresses_text}'. Decide whether to reuse the existing addresses or extract new ones from the latest user message."
+        " Default to 'reuse' when the user is continuing the same discussion without providing a clearly different address, intersection, neighborhood, borough, precinct, or other geographic reference."
+        " Choose 'reparse' only when the user explicitly supplies a new or conflicting location needing fresh parsing. Respond with either 'reuse' or 'reparse'.)"
+    )
+
+
+def get_reuse_dataset_decision_prompt(user_text, chat_history, last_datasets):
+    """Prompt for deciding whether to reuse previously parsed datasets."""
+    datasets_text = ", ".join(last_datasets) if last_datasets else "None"
+    return (
+        f"$(META-PROMPT: The user's new message is: '{user_text}'. Chat history: '{chat_history}'."
+        f" The last selected datasets are: '{datasets_text}'. Decide whether to reuse these datasets or infer a new set from the latest user message."
+        " Default to 'reuse' when the user is following up on the same analysis without asking for additional or different datasets."
+        " Choose 'reparse' only if the user clearly requests different datasets, categories, or data views. Respond with either 'reuse' or 'reparse'.)"
     )
 
 def get_surrounding_decision_prompt(user_text, chat_history, parsed_result):

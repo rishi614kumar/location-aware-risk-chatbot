@@ -1,5 +1,16 @@
-from typing import Any, Dict
+from typing import Any, Dict, Set
 from config.logger import logger
+
+
+def _normalize_choice(value: str, allowed: Set[str], default: str) -> str:
+    """Normalize model output to a valid keyword."""
+    if not value:
+        return default
+    cleaned = value.strip().lower()
+    cleaned = cleaned.splitlines()[0]
+    cleaned = cleaned.split()[0]
+    cleaned = cleaned.strip(".,;!:")
+    return cleaned if cleaned in allowed else default
 
 class ConversationalUnit:
     def __init__(self, name: str):
@@ -23,20 +34,51 @@ class DecideModeUnit(ConversationalUnit):
         context["mode"] = mode
         return context
 
-class DecideReuseParsedUnit(ConversationalUnit):
+class DecideReuseAddressesUnit(ConversationalUnit):
     def __init__(self, llm_chat):
-        super().__init__("decide_reuse_parsed")
+        super().__init__("decide_reuse_addresses")
         self.llm_chat = llm_chat
+
     async def run(self, context):
-        from prompts.app_prompts import get_reuse_parsed_decision_prompt
+        from prompts.app_prompts import get_reuse_address_decision_prompt
+
         user_text = context["user_text"]
         chat_history = context["chat_history"]
-        last_parsed_result = context.get("last_parsed_result")
-        reuse_decision = "reparse"
-        if last_parsed_result:
-            reuse_decision_prompt = get_reuse_parsed_decision_prompt(user_text, chat_history, last_parsed_result)
-            reuse_decision = self.llm_chat.ask(reuse_decision_prompt).strip().lower()
-        context["reuse_decision"] = reuse_decision
+        last_parsed_result = context.get("last_parsed_result") or {}
+        last_addresses = last_parsed_result.get("address") or []
+
+        if not last_addresses:
+            decision = "reparse"
+        else:
+            prompt = get_reuse_address_decision_prompt(user_text, chat_history, last_addresses)
+            raw_decision = self.llm_chat.ask(prompt)
+            decision = _normalize_choice(raw_decision, {"reuse", "reparse"}, "reuse")
+
+        context["reuse_addresses_decision"] = decision
+        return context
+
+
+class DecideReuseDatasetsUnit(ConversationalUnit):
+    def __init__(self, llm_chat):
+        super().__init__("decide_reuse_datasets")
+        self.llm_chat = llm_chat
+
+    async def run(self, context):
+        from prompts.app_prompts import get_reuse_dataset_decision_prompt
+
+        user_text = context["user_text"]
+        chat_history = context["chat_history"]
+        last_parsed_result = context.get("last_parsed_result") or {}
+        last_datasets = last_parsed_result.get("dataset_names") or []
+
+        if not last_datasets:
+            decision = "reparse"
+        else:
+            prompt = get_reuse_dataset_decision_prompt(user_text, chat_history, last_datasets)
+            raw_decision = self.llm_chat.ask(prompt)
+            decision = _normalize_choice(raw_decision, {"reuse", "reparse"}, "reuse")
+
+        context["reuse_datasets_decision"] = decision
         return context
 
 class ParseQueryUnit(ConversationalUnit):

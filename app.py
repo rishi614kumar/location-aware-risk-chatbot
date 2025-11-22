@@ -208,7 +208,8 @@ async def on_message(msg: cl.Message):
     parsed = ctx.get("parsed_result", {})
     decisions = {
         "mode": ctx.get("mode"),
-        "reuse_decision": ctx.get("reuse_decision"),
+        "reuse_addresses_decision": ctx.get("reuse_addresses_decision"),
+        "reuse_datasets_decision": ctx.get("reuse_datasets_decision"),
         "surrounding_decision": ctx.get("surrounding_decision"),
         "risk_decision": ctx.get("risk_decision"),
         "show_data_decision": ctx.get("show_data_decision"),
