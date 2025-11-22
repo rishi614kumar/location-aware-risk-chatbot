@@ -37,10 +37,6 @@ DATASET_DESCRIPTIONS = {
         "Contains zoning and land use classifications for each tax lot, "
         "used to determine regulatory and development constraints."
     ),
-    "NYC OpenData PLUTO": (
-        "Provides detailed building and land use data, including lot area, ownership, "
-        "construction year, and zoning attributes at the BBL level."
-    ),
     "NYC OpenData Automated Traffic Volume Counts": (
         "Records traffic volume at bridges and major roads, supporting transportation "
         "and congestion analysis for various locations across the city."
@@ -64,10 +60,6 @@ DATASET_DESCRIPTIONS = {
     "Historic Districts map": (
         "Defines the boundaries of designated historic districts throughout NYC, "
         "as established by the Landmarks Preservation Commission."
-    ),
-    "LION": (
-        "A single-line street base map representing the city’s streets and other linear geographic "
-        "features. Includes address ranges, borough codes, and right-of-way widths."
     ),
     "Zoning GIS data": (
         "Includes zoning districts, special purpose districts, subdistricts, limited height districts, "
@@ -149,14 +141,12 @@ DEFAULT_DATASET_FLAGS = dict(
 # Socrata dataset identifiers (4-4 codes) when available.
 DATASET_API_IDS = {
     "NYC OpenData Zoning and Tax Lot Database" : "fdkv-4t4z",
-    "NYC OpenData PLUTO" : "64uk-42ks",
     "NYC OpenData Automated Traffic Volume Counts" : "7ym2-wayt",
     "NYC OpenData Motor Vehicle Collisions" : "h9gi-nx95",
     "DOB Permits" : "ipu4-2q9a",
     "Asbestos Control Program" : "vq35-j9qm",
     "Digital City Map Shapefile" : "y23c-72fa",
     "Historic Districts map" : "skyk-mpzq",
-    "LION" : None,
     "Zoning GIS data" : None,
     "Population by Community Districts" : "xi7c-iiu2",
     "Population by Neighborhood Tabulation Area" : "9nt8-h7nd",
@@ -187,7 +177,7 @@ FEWSHOTS_MULTI = [
     ("Where are the nearest fire hydrants near Borough Hall?",
      {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants", "NYC OpenData Motor Vehicle Collisions"], "confidence": 0.75, "borough": "Brooklyn"}),
     ("Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
-     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data", "NYC OpenData PLUTO"], "confidence": 0.88, "borough": "Manhattan"}),
+     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data"], "confidence": 0.88, "borough": "Manhattan"}),
 ]
 
 # Fewshots for LLM to handle addresses and intersections
@@ -251,7 +241,6 @@ cat_to_ds = {
         "City Owned and Leased Property",
         "NYC OpenData Zoning and Tax Lot Database",
         "Historic Districts map",
-        "LION data",
         "Zoning GIS data",
         "Digital City map shapefile",
         "Parks Monuments",
@@ -272,7 +261,6 @@ cat_to_ds = {
         "MTA subway and other underground train lines",
     ],
     "Public Safety & Social Context": [
-        "NYC OpenData PLUTO",
         "NYC OpenData Motor Vehicle Collisions",
         "NYC OpenData Automated Traffic Volume Counts",
         "Population by Community Districts",
