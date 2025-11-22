@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Dict, Set
 from config.logger import logger
 
@@ -30,7 +31,7 @@ class DecideModeUnit(ConversationalUnit):
         user_text = context["user_text"]
         chat_history = context["chat_history"]
         decision_prompt = get_decision_prompt(user_text, chat_history)
-        mode = self.llm_chat.ask(decision_prompt).strip().lower()
+        mode = (await asyncio.to_thread(self.llm_chat.ask, decision_prompt)).strip().lower()
         context["mode"] = mode
         return context
 
@@ -51,7 +52,7 @@ class DecideReuseAddressesUnit(ConversationalUnit):
             decision = "reparse"
         else:
             prompt = get_reuse_address_decision_prompt(user_text, chat_history, last_addresses)
-            raw_decision = self.llm_chat.ask(prompt)
+            raw_decision = await asyncio.to_thread(self.llm_chat.ask, prompt)
             decision = _normalize_choice(raw_decision, {"reuse", "reparse"}, "reuse")
 
         context["reuse_addresses_decision"] = decision
@@ -75,7 +76,7 @@ class DecideReuseDatasetsUnit(ConversationalUnit):
             decision = "reparse"
         else:
             prompt = get_reuse_dataset_decision_prompt(user_text, chat_history, last_datasets)
-            raw_decision = self.llm_chat.ask(prompt)
+            raw_decision = await asyncio.to_thread(self.llm_chat.ask, prompt)
             decision = _normalize_choice(raw_decision, {"reuse", "reparse"}, "reuse")
 
         context["reuse_datasets_decision"] = decision
@@ -87,7 +88,7 @@ class ParseQueryUnit(ConversationalUnit):
     async def run(self, context):
         from llm.LLMParser import route_query_to_datasets_multi
         user_text = context["user_text"]
-        result = route_query_to_datasets_multi(user_text)
+        result = await asyncio.to_thread(route_query_to_datasets_multi, user_text)
         context["parsed_result"] = result
         return context
 
@@ -98,12 +99,12 @@ class DataPreviewUnit(ConversationalUnit):
     async def run(self, context):
         from scripts.DataHandler import DataHandler
         from prompts.app_prompts import get_loading_datasets_prompt
-        import asyncio
         result = context["parsed_result"]
         datasets = result.get('dataset_names', [])
         handler = DataHandler(datasets)
         context["handler"] = handler
-        context["llm_data_response"] = self.llm_chat.ask(get_loading_datasets_prompt(handler))
+        prompt = get_loading_datasets_prompt(handler)
+        context["llm_data_response"] = await asyncio.to_thread(self.llm_chat.ask, prompt)
         return context
 
 class ResolveBBLsUnit(ConversationalUnit):
@@ -111,7 +112,6 @@ class ResolveBBLsUnit(ConversationalUnit):
         super().__init__("resolve_bbls")
     async def run(self, context):
         from scripts.GeoScope import resolve_geo_bundles_from_addresses
-        import asyncio
         addresses = context.get("parsed_result", {}).get('address', [])
         resolution = await asyncio.to_thread(resolve_geo_bundles_from_addresses, addresses)
         resolved_bbls = resolution.bbls
@@ -127,7 +127,6 @@ class AggregateSurroundingBBLsUnit(ConversationalUnit):
         super().__init__("aggregate_surrounding")
     async def run(self, context):
         from scripts.GeoScope import aggregate_surrounding_bbls
-        import asyncio
         resolved_bbls = context.get("resolved_bbls", [])
         nearby_bbls = await asyncio.to_thread(aggregate_surrounding_bbls, resolved_bbls, True)
         context["nearby_bbls"] = nearby_bbls
@@ -139,7 +138,6 @@ class BuildDatasetFiltersUnit(ConversationalUnit):
         super().__init__("build_dataset_filters")
     async def run(self, context):
         from scripts.GeoScope import build_dataset_filters_for_handler
-        import asyncio
         handler = context["handler"]
         resolved_bbls = context.get("resolved_bbls", [])
         nearby_bbls = context.get("nearby_bbls", [])
@@ -155,29 +153,44 @@ class BuildDatasetFiltersUnit(ConversationalUnit):
         return context
 
 class FilterDatasetsUnit(ConversationalUnit):
-    def __init__(self):
+    def __init__(self, max_concurrent: int = 4):
         super().__init__("filter_datasets")
+        self.max_concurrent = max_concurrent
     async def run(self, context):
         handler = context["handler"]
         dataset_filters = context["dataset_filters"]
-        import asyncio
+        import pandas as pd
+
+        semaphore = asyncio.Semaphore(max(1, self.max_concurrent))
         filtered_datasets = []
         data_samples = {}
-        for ds in handler:
-            filter_kwargs = dataset_filters.get(ds.name, {})
-            where = filter_kwargs.get("where")
-            limit = filter_kwargs.get("limit")
-            try:
-                df_full = await asyncio.to_thread(ds.df_filtered, where, limit)
-            except Exception as e:
-                logger.warning(f"Filtered fetch failed for {ds.name}: {e}; using empty DataFrame")
-                import pandas as pd
-                df_full = pd.DataFrame()
-            # If result empty just keep empty (no fallback to unfiltered)
-            if (df_full is None) or (hasattr(df_full, 'empty') and df_full.empty):
-                import pandas as pd
-                df_full = pd.DataFrame()
-            df_head = df_full.head(5) if hasattr(df_full, 'head') else df_full
+
+        async def _process_dataset(ds):
+            async with semaphore:
+                filter_kwargs = dataset_filters.get(ds.name, {})
+                where = filter_kwargs.get("where")
+                limit = filter_kwargs.get("limit")
+                try:
+                    df_full = await asyncio.to_thread(ds.df_filtered, where, limit)
+                except Exception as e:
+                    logger.warning(f"Filtered fetch failed for {ds.name}: {e}; using empty DataFrame")
+                    df_full = pd.DataFrame()
+
+                if (df_full is None) or (hasattr(df_full, 'empty') and df_full.empty):
+                    df_full = pd.DataFrame()
+
+                df_head = df_full.head(5) if hasattr(df_full, 'head') else df_full
+                return ds, where, limit, df_full, df_head
+
+        tasks = [_process_dataset(ds) for ds in handler]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Dataset filtering task failed: {result}")
+                continue
+
+            ds, where, limit, df_full, df_head = result
             if where is not None or limit is not None:
                 try:
                     object.__setattr__(ds, "_df_cache", df_full)
@@ -185,6 +198,7 @@ class FilterDatasetsUnit(ConversationalUnit):
                     logger.warning(f"Could not set _df_cache for {ds.name}: {e}")
             data_samples[ds.name] = df_head
             filtered_datasets.append(ds)
+
         handler._datasets = filtered_datasets
         context["filtered_datasets"] = filtered_datasets
         context["data_samples"] = data_samples
@@ -200,7 +214,7 @@ class DecideRiskSummaryUnit(ConversationalUnit):
         chat_history = context["chat_history"]
         result = context["parsed_result"]
         risk_decision_prompt = get_risk_summary_decision_prompt(user_text, chat_history, result)
-        risk_decision = self.llm_chat.ask(risk_decision_prompt).strip().lower()
+        risk_decision = (await asyncio.to_thread(self.llm_chat.ask, risk_decision_prompt)).strip().lower()
         context["risk_decision"] = risk_decision
         return context
 
@@ -209,7 +223,6 @@ class RiskSummaryUnit(ConversationalUnit):
         super().__init__("risk_summary")
     async def run(self, context):
         from scripts.RiskSummarizer import summarize_risk
-        import asyncio
         user_text = context["user_text"]
         result = context["parsed_result"]
         handler = context["handler"]
@@ -228,7 +241,7 @@ class DecideShowDataUnit(ConversationalUnit):
         chat_history = context["chat_history"]
         result = context["parsed_result"]
         show_data_decision_prompt = get_show_data_decision_prompt(user_text, chat_history, result)
-        show_data_decision = self.llm_chat.ask(show_data_decision_prompt).strip().lower()
+        show_data_decision = (await asyncio.to_thread(self.llm_chat.ask, show_data_decision_prompt)).strip().lower()
         context["show_data_decision"] = show_data_decision
         return context
 
@@ -241,7 +254,7 @@ class FollowupUnit(ConversationalUnit):
         result = context["parsed_result"]
         risk_summary = context.get("risk_summary")
         followup_prompt = get_followup_prompt(result, risk_summary)
-        followup_response = self.llm_chat.ask(followup_prompt)
+        followup_response = await asyncio.to_thread(self.llm_chat.ask, followup_prompt)
         context["followup_response"] = followup_response
         return context
 
@@ -253,7 +266,10 @@ class ConversationalAnswerUnit(ConversationalUnit):
         from prompts.app_prompts import get_conversational_answer_prompt
         user_text = context["user_text"]
         chat_history = context["chat_history"]
-        response = self.llm_chat.ask(get_conversational_answer_prompt(user_text, chat_history))
+        response = await asyncio.to_thread(
+            self.llm_chat.ask,
+            get_conversational_answer_prompt(user_text, chat_history),
+        )
         context["conversational_response"] = response
         return context
 
@@ -299,7 +315,7 @@ class SurroundingDecisionUnit(ConversationalUnit):
         chat_history = context["chat_history"]
         parsed_result = context.get("parsed_result", {})
         decision_prompt = get_surrounding_decision_prompt(user_text, chat_history, parsed_result)
-        decision = self.llm_chat.ask(decision_prompt).strip().lower()
+        decision = (await asyncio.to_thread(self.llm_chat.ask, decision_prompt)).strip().lower()
         if decision not in ("include_surrounding", "target_only"):
             decision = "target_only"
         context["surrounding_decision"] = decision

@@ -3,6 +3,9 @@ GeoScope stub: returns a filter dict for each dataset.
 Replace logic here to generate spatial filters based on addresses and handler.datasets.
 """
 from __future__ import annotations
+import atexit
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 from itertools import combinations
 from api.GeoClient import get_bbl_from_address, get_bbl_from_intersection
@@ -16,6 +19,22 @@ from adapters.schemas import GeoBundle
 from scripts.GeoBundle import geo_from_bbl
 from config.settings import DATASET_CONFIG
 from config.logger import logger
+
+try:
+    _GEO_MAX_WORKERS = max(1, int(os.getenv("GEO_MAX_WORKERS", "4")))
+except ValueError:
+    _GEO_MAX_WORKERS = 4
+_GEO_EXECUTOR = ThreadPoolExecutor(max_workers=_GEO_MAX_WORKERS)
+
+
+def _shutdown_geo_executor() -> None:
+    try:
+        _GEO_EXECUTOR.shutdown(wait=False)
+    except Exception:
+        pass
+
+
+atexit.register(_shutdown_geo_executor)
 
 
 @dataclass(frozen=True)
@@ -172,18 +191,27 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
         return _dedupe_preserve_order(resolved_bbls)
 
     nearby_set = set()
-    for bbl in resolved_bbls:
+
+    futures = {
+        _GEO_EXECUTOR.submit(
+            get_surrounding_bbls_from_bbl,
+            bbl,
+            mode="street",
+            include_self=True,
+        ): bbl
+        for bbl in resolved_bbls
+    }
+
+    for future in as_completed(futures):
+        seed_bbl = futures[future]
         try:
-            results = get_surrounding_bbls_from_bbl(
-                bbl=bbl,
-                mode="street",
-                include_self=True,
-            )
-            for item in results:
-                nearby_set.add(item)
+            results = future.result()
         except Exception as exc:
-            logger.warning(f"Surrounding lookup failed for {bbl}: {exc}")
-            nearby_set.add(bbl)
+            logger.warning(f"Surrounding lookup failed for {seed_bbl}: {exc}")
+            results = [seed_bbl]
+
+        for item in results:
+            nearby_set.add(item)
     nearby_bbls = sorted(nearby_set)
     logger.info(f"Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
     return nearby_bbls
@@ -253,6 +281,37 @@ def _build_where_for_geo_unit(
     return None
 
 
+def _build_filter_for_dataset(
+    ds,
+    resolved_bbls: List[str],
+    nearby_bbls: List[str],
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+):
+    ds_name = ds.name
+    ds_conf = DATASET_CONFIG.get(ds_name, {})
+    geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+    mode = ds_conf.get("mode", "street")
+    want_surrounding = ds_conf.get("surrounding", False)
+
+    try:
+        bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
+        where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, bundle_lookup=bundle_lookup)
+        if where_str:
+            filter_def = {"where": where_str, "limit": 1000}
+            logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
+        else:
+            filter_def = {"limit": 200}
+            logger.warning(f"No valid filter for {ds_name}; using preview mode.")
+    except NotImplementedError:
+        logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
+        filter_def = {"limit": 0}
+    except Exception as exc:
+        logger.error(f"Unexpected error on {ds_name}: {exc}")
+        filter_def = {"limit": 100}
+
+    return ds_name, filter_def
+
+
 def build_dataset_filters_for_handler(
     handler,
     resolved_bbls: List[str],
@@ -261,27 +320,28 @@ def build_dataset_filters_for_handler(
 ) -> Dict[str, Dict[str, Any]]:
     """Build the filter dict per dataset in handler using resolved and nearby BBLs per DATASET_CONFIG."""
     filters: Dict[str, Dict[str, Any]] = {}
+    future_map = {
+        ds.name: _GEO_EXECUTOR.submit(
+            _build_filter_for_dataset,
+            ds,
+            resolved_bbls,
+            nearby_bbls,
+            bundle_lookup,
+        )
+        for ds in handler
+    }
+
     for ds in handler:
-        ds_name = ds.name
-        ds_conf = DATASET_CONFIG.get(ds_name, {})
-        geo_unit = ds_conf.get("geo_unit", "BBL").upper()
-        mode = ds_conf.get("mode", "street")
-        want_surrounding = ds_conf.get("surrounding", False)
+        future = future_map.get(ds.name)
+        if future is None:
+            continue
         try:
-            bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
-            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, bundle_lookup=bundle_lookup)
-            if where_str:
-                filters[ds_name] = {"where": where_str, "limit": 1000}
-                logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
-            else:
-                filters[ds_name] = {"limit": 200}
-                logger.warning(f"No valid filter for {ds_name}; using preview mode.")
-        except NotImplementedError:
-            logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
-            filters[ds_name] = {"limit": 0}
-        except Exception as e:
-            logger.error(f"Unexpected error on {ds_name}: {e}")
-            filters[ds_name] = {"limit": 100}
+            ds_name, filter_def = future.result()
+        except Exception as exc:
+            ds_name = ds.name
+            logger.error(f"Dataset filter task failed for {ds_name}: {exc}")
+            filter_def = {"limit": 100}
+        filters[ds_name] = filter_def
     return filters
 
 def get_dataset_filters(
