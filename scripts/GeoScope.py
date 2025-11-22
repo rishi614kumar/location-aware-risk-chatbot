@@ -137,7 +137,7 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)
         vals = ",".join(f"'{n}'" for n in ids)
-        return f"nta2020 IN ({vals})" if vals else None
+        return f"nta_code IN ({vals})" if vals else None
 
     if geo_unit == "STREETSPAN":
         ids = get_surrounding_units(bbls_to_use, geo_unit)
