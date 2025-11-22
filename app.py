@@ -286,8 +286,13 @@ async def on_message(msg: cl.Message):
 
     try:
         logger.info(f"Calling get_dataset_filters with addresses: {addresses}")
-        dataset_filters = await asyncio.to_thread(get_dataset_filters, addresses, handler)
-        logger.info(f"Received dataset_filters: {dataset_filters}")
+        dataset_filters, geo_bundles = await asyncio.to_thread(get_dataset_filters, addresses, handler)
+        setattr(handler, "geo_bundles", geo_bundles)
+        logger.info(
+            "Received dataset_filters: %s (geo bundles=%d)",
+            dataset_filters,
+            len(geo_bundles),
+        )
     except Exception as e:
         logger.error(f"Error in get_dataset_filters: {e}")
         await cl.Message(content=f"Error in GeoScope filtering: {e}").send()

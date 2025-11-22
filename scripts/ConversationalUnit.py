@@ -110,11 +110,15 @@ class ResolveBBLsUnit(ConversationalUnit):
     def __init__(self):
         super().__init__("resolve_bbls")
     async def run(self, context):
-        from scripts.GeoScope import resolve_bbls_from_addresses
+        from scripts.GeoScope import resolve_geo_bundles_from_addresses
         import asyncio
         addresses = context.get("parsed_result", {}).get('address', [])
-        resolved_bbls = await asyncio.to_thread(resolve_bbls_from_addresses, addresses)
+        resolution = await asyncio.to_thread(resolve_geo_bundles_from_addresses, addresses)
+        resolved_bbls = resolution.bbls
+        bundle_lookup = {bundle.bbl: bundle for bundle in resolution.bundles if bundle and bundle.bbl}
         context["resolved_bbls"] = resolved_bbls
+        context["geo_bundles"] = resolution.bundles
+        context["bundle_lookup"] = bundle_lookup
         logger.info(f"Resolved BBLs: {resolved_bbls}")
         return context
 
@@ -139,7 +143,14 @@ class BuildDatasetFiltersUnit(ConversationalUnit):
         handler = context["handler"]
         resolved_bbls = context.get("resolved_bbls", [])
         nearby_bbls = context.get("nearby_bbls", [])
-        dataset_filters = await asyncio.to_thread(build_dataset_filters_for_handler, handler, resolved_bbls, nearby_bbls)
+        bundle_lookup = context.get("bundle_lookup")
+        dataset_filters = await asyncio.to_thread(
+            build_dataset_filters_for_handler,
+            handler,
+            resolved_bbls,
+            nearby_bbls,
+            bundle_lookup=bundle_lookup,
+        )
         context["dataset_filters"] = dataset_filters
         return context
 

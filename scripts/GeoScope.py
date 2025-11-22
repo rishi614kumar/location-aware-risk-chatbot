@@ -3,17 +3,44 @@ GeoScope stub: returns a filter dict for each dataset.
 Replace logic here to generate spatial filters based on addresses and handler.datasets.
 """
 from __future__ import annotations
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from itertools import combinations
 from api.GeoClient import get_bbl_from_address, get_bbl_from_intersection
-from adapters.surrounding import get_surrounding_bbls_from_bbl
+from dataclasses import dataclass
 from adapters.surrounding import get_surrounding_bbls_from_bbl
 from adapters.coords import get_lonlat_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl
+from adapters.schemas import GeoBundle
+from scripts.GeoBundle import geo_from_bbl
 from config.settings import DATASET_CONFIG
 from config.logger import logger
+
+
+@dataclass(frozen=True)
+class GeoResolution:
+    """Resolved BBLs alongside their enriched GeoBundle payloads."""
+
+    bundles: List[GeoBundle]
+    bbls: List[str]
+
+
+def _dedupe_preserve_order(values: List[Optional[str]]) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def _format_lonlat(lon: float, lat: float) -> str:
+    return f"{lon:.6f},{lat:.6f}"
 
 def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     house = (record.get("house_number") or "").strip()
@@ -21,7 +48,7 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     borough = (record.get("borough") or "").strip()
 
     if not street or not borough:
-        logger.warning(f"No proper address for {normalized} ({borough})")
+        logger.warning("Incomplete address data; cannot resolve BBL for record.")
         return None
 
     normalized = street.replace(" and ", " & ").replace(" AND ", " & ")
@@ -47,7 +74,39 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
+def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoResolution:
+    """Resolve address dicts into GeoBundle objects plus ordered BBL list."""
+
+    bundles: List[GeoBundle] = []
+    ordered_bbls: List[str] = []
+    seen_bbls: set[str] = set()
+
+    for record in addresses or []:
+        bbl = _resolve_single_bbl(record)
+        if not bbl:
+            continue
+        bbl_str = str(bbl)
+        if bbl_str in seen_bbls:
+            continue
+        seen_bbls.add(bbl_str)
+
+        try:
+            bundle = geo_from_bbl(bbl_str)
+            if not isinstance(bundle, GeoBundle):
+                raise TypeError("geo_from_bbl did not return GeoBundle")
+            if not bundle.bbl:
+                bundle = bundle.copy(update={"bbl": bbl_str})
+            bundles.append(bundle)
+            ordered_bbls.append(bundle.bbl)
+        except Exception as exc:
+            logger.warning(f"Geo bundle lookup failed for BBL {bbl_str}: {exc}")
+            ordered_bbls.append(bbl_str)
+
+    ordered_bbls = _dedupe_preserve_order(ordered_bbls)
+    return GeoResolution(bundles=bundles, bbls=ordered_bbls)
+
+
+def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: Optional[Dict[str, GeoBundle]] = None) -> List[str]:
     """
     Given a list of nearby BBLs, convert all to the specified geo_unit and
     deduplicate results.
@@ -55,19 +114,34 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
     units = set()
 
     for b in bbl_list:
+        bundle = bundle_lookup.get(b) if bundle_lookup else None
         try:
             if geo_unit == "PRECINCT":
-                val = get_precinct_from_bbl(b)
+                if bundle and bundle.precinct:
+                    val = str(bundle.precinct)
+                else:
+                    val = get_precinct_from_bbl(b)
+                    val = str(val) if val is not None else None
             elif geo_unit.startswith("NTA"):
-                val = get_nta_from_bbl(b)
+                if bundle and bundle.nta:
+                    val = str(bundle.nta)
+                else:
+                    val = get_nta_from_bbl(b)
             elif geo_unit == "STREETSPAN":
                 vals = get_lion_span_from_bbl(b)
                 if vals:
                     units.update(vals)
                 continue
             elif geo_unit in ("LONLAT", "COORD"):
-                lon, lat = get_lonlat_from_bbl(b)
-                val = f"{lon},{lat}"
+                if bundle and bundle.longitude is not None and bundle.latitude is not None:
+                    val = _format_lonlat(float(bundle.longitude), float(bundle.latitude))
+                else:
+                    coords = get_lonlat_from_bbl(b)
+                    if coords is not None:
+                        lon, lat = coords
+                        val = _format_lonlat(lon, lat)
+                    else:
+                        val = None
             elif geo_unit == "BBL":
                 val = b
             else:
@@ -85,13 +159,9 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
 
 def resolve_bbls_from_addresses(addresses: List[Dict[str, Any]]) -> List[str]:
     """Resolve BBLs from a list of address dicts. Deduplicated, order-preserving."""
-    resolved_bbls: List[str] = []
-    for record in addresses or []:
-        bbl = _resolve_single_bbl(record)
-        if bbl:
-            resolved_bbls.append(bbl)
-    # de-duplicate while preserving order
-    return list(dict.fromkeys(b for b in resolved_bbls if b))
+
+    resolution = resolve_geo_bundles_from_addresses(addresses)
+    return resolution.bbls
 
 
 def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = True) -> List[str]:
@@ -99,7 +169,7 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
     if not resolved_bbls:
         return []
     if not surrounding:
-        return list(dict.fromkeys(resolved_bbls))
+        return _dedupe_preserve_order(resolved_bbls)
 
     nearby_set = set()
     for bbl in resolved_bbls:
@@ -119,7 +189,12 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
     return nearby_bbls
 
 
-def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional[str]:
+def _build_where_for_geo_unit(
+    geo_unit: str,
+    bbls_to_use: List[str],
+    *,
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+) -> Optional[str]:
     """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
     geo_unit = (geo_unit or "BBL").upper()
     if not bbls_to_use:
@@ -130,22 +205,22 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
         return f"BBL IN ({vals})"
 
     if geo_unit == "PRECINCT":
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{p}'" for p in ids)
         return f"Precinct IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{n}'" for n in ids)
         return f"nta_code IN ({vals})" if vals else None
 
     if geo_unit == "STREETSPAN":
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{s}'" for s in ids)
         return f"SegmentID IN ({vals})" if vals else None
 
     if geo_unit in ("LONLAT", "COORD"):
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         coords = [lonlat.split(',') for lonlat in ids]
         conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
         return conds or None
@@ -178,7 +253,12 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
     return None
 
 
-def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_bbls: List[str]) -> Dict[str, Dict[str, Any]]:
+def build_dataset_filters_for_handler(
+    handler,
+    resolved_bbls: List[str],
+    nearby_bbls: List[str],
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+) -> Dict[str, Dict[str, Any]]:
     """Build the filter dict per dataset in handler using resolved and nearby BBLs per DATASET_CONFIG."""
     filters: Dict[str, Dict[str, Any]] = {}
     for ds in handler:
@@ -189,7 +269,7 @@ def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_
         want_surrounding = ds_conf.get("surrounding", False)
         try:
             bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
-            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use)
+            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, bundle_lookup=bundle_lookup)
             if where_str:
                 filters[ds_name] = {"where": where_str, "limit": 1000}
                 logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
@@ -204,32 +284,49 @@ def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_
             filters[ds_name] = {"limit": 100}
     return filters
 
-def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=True) -> Dict[str, Dict[str, Any]]:
-    """Orchestrator that delegates to modular helpers for clarity and testability."""
+def get_dataset_filters(
+    addresses: List[Dict[str, Any]],
+    handler,
+    surrounding: bool = True,
+) -> Tuple[Dict[str, Dict[str, Any]], List[GeoBundle]]:
+    """Return dataset filters along with the resolved GeoBundles for downstream reuse."""
+
     filters: Dict[str, Dict[str, Any]] = {}
 
     if not addresses:
         logger.warning("No address provided — using default preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
-        return filters
+        return filters, []
 
-    # Step 1: Resolve addresses to BBLs
-    resolved_bbls = resolve_bbls_from_addresses(addresses)
+    # Step 1: Resolve addresses to GeoBundles/BBLs
+    resolution = resolve_geo_bundles_from_addresses(addresses)
+    resolved_bbls = resolution.bbls
 
     if not resolved_bbls:
         logger.warning("No BBLs resolved from provided addresses; using preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
-        return filters
+        return filters, resolution.bundles
+
+    bundle_lookup = {bundle.bbl: bundle for bundle in resolution.bundles if bundle.bbl}
 
     # Step 2: Aggregate surrounding BBLs (optional)
     nearby_bbls = aggregate_surrounding_bbls(resolved_bbls, surrounding=surrounding)
 
     # Step 3: Build dataset filters
-    filters = build_dataset_filters_for_handler(handler, resolved_bbls, nearby_bbls)
+    filters = build_dataset_filters_for_handler(
+        handler,
+        resolved_bbls,
+        nearby_bbls,
+        bundle_lookup=bundle_lookup,
+    )
 
-    # Log the final filters dict for debugging
-    logger.info(f"Final dataset filters returned: {filters}")
+    logger.info(
+        "Final dataset filters returned for %d datasets using %d resolved BBLs (bundles=%d)",
+        len(filters),
+        len(resolved_bbls),
+        len(resolution.bundles),
+    )
 
-    return filters
+    return filters, resolution.bundles
