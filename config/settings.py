@@ -120,9 +120,7 @@ DATASET_DESCRIPTIONS = {
         "and infrastructure analysis."
     ),
     "Street Pavement Rating": (
-        "The Citywide Catch Basins dataset maps over 150,000 catch basins that collect stormwater "
-        "and direct it into NYC’s sewer network or nearby waterbodies, supporting drainage "
-        "and flood management."
+        "The Agency performs ongoing assessment of New York City streets. Ratings are based on a scale from 1 to 10."
     ),
 }
 
@@ -137,6 +135,14 @@ DEFAULT_DATASET_FLAGS = dict(
     supports_intersections=True,
     supports_addresses=True,
 )
+
+# Default domain to call SOCRATA
+DEFAULT_SOCRATA_DOMAIN = "data.cityofnewyork.us"
+
+# Alternative domain
+SOCRATA_DOMAIN_OVERRIDES = {
+    "MTA subway and other underground train lines": "data.ny.gov",
+}
 
 # Socrata dataset identifiers (4-4 codes) when available.
 DATASET_API_IDS = {
@@ -175,7 +181,7 @@ FEWSHOTS_MULTI = [
     ("Any flood or sewer risk around 123 Main St?",
      {"categories": ["Environmental & Health Risks"], "datasets": ["Sewer System Data", "Clean Air Tracking System (CATS)"], "confidence": 0.80, "borough": "Queens"}),
     ("Where are the nearest fire hydrants near Borough Hall?",
-     {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants", "NYC OpenData Motor Vehicle Collisions"], "confidence": 0.75, "borough": "Brooklyn"}),
+     {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants"], "confidence": 0.75, "borough": "Brooklyn"}),
     ("Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
      {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data"], "confidence": 0.88, "borough": "Manhattan"}),
 ]
@@ -258,7 +264,8 @@ cat_to_ds = {
         "NYC OpenData Motor Vehicle Collisions",
         "Crime",
         "Street Construction Permits",
-        "MTA subway and other underground train lines",
+        "MTA subway and other underground train lines"
+        "Street Pavement Rating",
     ],
     "Public Safety & Social Context": [
         "NYC OpenData Motor Vehicle Collisions",

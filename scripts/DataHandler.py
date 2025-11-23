@@ -23,6 +23,14 @@ DEFAULT_DATASET_FLAGS: Dict[str, bool] = settings.DEFAULT_DATASET_FLAGS
 # Socrata dataset identifiers (4-4 codes) when available.
 DATASET_API_IDS: Dict[str, str] = settings.DATASET_API_IDS
 
+# Socrata dataset base url
+DEFAULT_SOCRATA_DOMAIN: str = settings.DEFAULT_SOCRATA_DOMAIN
+
+# Socrata dataset alternative url
+SOCRATA_DOMAIN_OVERRIDES: str = settings.SOCRATA_DOMAIN_OVERRIDES
+
+def socrata_domain(dataset_name: str) -> str:
+    return SOCRATA_DOMAIN_OVERRIDES.get(dataset_name, DEFAULT_SOCRATA_DOMAIN)
 
 # Canonical mapping from risk categories to the datasets that provide answers.
 cat_to_ds: Dict[str, List[str]] = settings.cat_to_ds
@@ -98,6 +106,8 @@ class DataSet:
         Adds retry/backoff for Socrata 503 throttling and supports APP TOKEN via env SOCRATA_APP_TOKEN.
         """
         api_id = DATASET_API_IDS.get(self.name)
+        domain = socrata_domain(self.name)
+
         if api_id is None:
             path = settings.FLATFILE_PATHS.get(self.name)
             layer = settings.FLATFILE_LAYERS.get(self.name)
@@ -115,7 +125,7 @@ class DataSet:
         if not api_id:
             raise NotImplementedError(f"No API mapping configured for dataset '{self.name}'")
 
-        client = Socrata("data.cityofnewyork.us", None)
+        client = client = Socrata(domain, None)
         params = {}
         if limit is not None:
             params["limit"] = limit
