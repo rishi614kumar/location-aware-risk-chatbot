@@ -142,12 +142,15 @@ class AzureOpenAIBackend(ChatBackend):
 
         # Append user message
         self._chat_history.append({"role": "user", "content": message})
+        params = {**self._generation_config}
+        params["response_format"] = {"type": "json_object"}
+        params["temperature"] = 0.0
 
         # Generate response
         response = self._client.chat.completions.create(
             model=self._deployment,
             messages=self._chat_history,
-            **self._generation_config
+            **params
         )
 
         reply = response.choices[0].message.content
