@@ -289,7 +289,14 @@ def _build_filter_for_dataset(
 ):
     ds_name = ds.name
     ds_conf = DATASET_CONFIG.get(ds_name, {})
-    geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+    geo_unit_raw = ds_conf.get("geo_unit", "BBL")
+
+    if ds_name == 'Active Projects':
+        limit = ds_conf.get("limit", 1000)
+        logger.info(f"{ds_name} marked as direct/geo-optional; using limit={limit}")
+        return ds_name, {"limit": limit}
+    
+    geo_unit = str(geo_unit_raw).upper()
     mode = ds_conf.get("mode", "street")
     want_surrounding = ds_conf.get("surrounding", False)
 

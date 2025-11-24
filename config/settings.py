@@ -444,6 +444,7 @@ DATASET_CONFIG = {
     #"Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
     "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
     "Active Projects": {"geo_unit": None, "mode": "direct", "surrounding": False, "requires_geo": False, "limit": 1000},
+    "MTA subway and other underground train lines": {"geo_unit": "LONLAT","col_names":{"geometry":"georeference"},"mode": "radius","surrounding":False}
     # Add more dataset configurations as needed
 }
 
