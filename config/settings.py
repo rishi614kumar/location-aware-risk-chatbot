@@ -404,11 +404,32 @@ DATASET_CONFIG = {
     "Asbestos Control Program": {"geo_unit": "BBL", "mode": "street", "surrounding":True},
     "Crime": {"geo_unit": "PRECINCT", "mode": "street","surrounding":False},
     "Sewer System Data": {"geo_unit": "", "mode": "radius","surrounding":False},
-    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius","surrounding":True},
-    #"Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
+    "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT","Borough":"M", "cols": {"block": "00853", "lot": "0002"},"mode": "radius","surrounding":True},
+    "Population by Community Districts": {"geo_unit": "BOROUGH","Borough":"M", "Borough_form":1,"mode": "street","surrounding":False},
     "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
+    "DOB permits": {"geo_unit": "BBL_SPLIT","Borough":"M","Borough_form":0,"cols": {"block": "00853", "lot": "00002"},"mode": "street","surrounding":True},
+    "DOB NOW: Build - Job Application Findings": {"geo_unit": "BBL","mode": "street","surrounding":True},
+    "NYC OpenData Zoning and Tax Lot Database": {"geo_unit": "BBL","mode": "radius","surrounding":True},
+    "City Owned and Leased Property": {"geo_unit": "BBL","mode": "radius","surrounding":True},
+    "Water and Sewer Permits": {"geo_unit": "BBL_SPLIT","Borough":"M","Borough_form":1,"cols": {"block": "00853", "lot": "0002"},"col_names":{"borough": "propertyborough","block": "propertyblock", "lot":"propertylot"},"mode": "street","surrounding":True},
+    "NYC OpenData Motor Vehicle Collisions": {"geo_unit": "LONLAT","col_names":{"geometry":"loaction"},"mode": "street","surrounding":True},
+    "Digital City map shapefile": {"geo_unit": "LONLAT","col_names":{"geometry":"the_geom"},"mode": "radius","surrounding":False},
+    "Historic Districts map" : {"geo_unit": "LONLAT","col_names":{"geometry":"the_geom"},"mode": "radius","surrounding":False},
+    "MTA subway and other underground train lines": {"geo_unit": "LONLAT","col_names":{"geometry":"georeference"},"mode": "radius","surrounding":False},
+    "Citywide Catch Basins": {"geo_unit": "LONLAT","col_names":{"geometry":"the_geom"},"mode": "radius","surrounding":False},
+    "Citywide Hydrants": {"geo_unit": "LONLAT","col_names":{"geometry":"the_geom"},"mode": "radius","surrounding":False},
+    "Street Pavement Rating": {"geo_unit": "LONLAT","col_names":{"geometry":"the_geom"},"mode": "radius","surrounding":False}
     # Add more dataset configurations as needed
 }
+
+BORO_CODE_MAP = {
+    "1": ["MANHATTAN","Manhattan"],
+    "2": ["BRONX","Bronx"],
+    "3": ["BROOKLYN","Brooklyn"],
+    "4": ["QUEENS","Queens"],
+    "5": ["STATEN ISLAND","Staten Island"]
+}
+
 
 # LLM Prompting for returning datasets
 SYS_MULTI = f"""
