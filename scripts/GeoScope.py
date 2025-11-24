@@ -353,6 +353,22 @@ def get_dataset_filters(
 
     filters: Dict[str, Dict[str, Any]] = {}
 
+    direct_datasets = [
+        ds
+        for ds in handler
+        if not DATASET_CONFIG.get(ds.name, {}).get("requires_geo", True)
+    ]
+    if direct_datasets:
+        for ds in handler:
+            conf = DATASET_CONFIG.get(ds.name, {})
+            limit = conf.get("limit", 1000)
+            filters[ds.name] = {"limit": limit}
+        logger.info(
+            "Infrastructure/direct datasets detected (%s); bypassing GeoScope filters.",
+            ", ".join(ds.name for ds in direct_datasets),
+        )
+        return filters, []
+
     if not addresses:
         logger.warning("No address provided — using default preview mode.")
         for ds in handler:

@@ -510,4 +510,11 @@ def route_query_to_datasets_multi(
     Returns: {"categories": [...], "confidence": float, "borough": str, "address": [...], "dataset_names": [...]}
     """
     active_parser = parser or get_default_parser()
-    return active_parser.route_query_to_datasets(query)
+    result = active_parser.route_query_to_datasets(query)
+
+    categories = set(result.get("categories", []))
+    if "Infrastructure Projects" in categories:
+        result["dataset_names"] = ["Active Projects"]
+        result["address"] = []
+
+    return result

@@ -10,3 +10,5 @@ __pycache__/
 *.py[cod]
 /ds_capstone/
 chainlit_history.db
+test.py
+.pytest_cache

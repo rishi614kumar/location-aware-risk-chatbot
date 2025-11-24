@@ -122,6 +122,9 @@ DATASET_DESCRIPTIONS = {
     "Street Pavement Rating": (
         "The Agency performs ongoing assessment of New York City streets. Ratings are based on a scale from 1 to 10."
     ),
+    "Active Projects": (
+        "List of currently active NYC capital projects with project (FMS) identifiers supporting funding and procurement analysis."
+    ),
 }
 
 # Lightweight topical tags that downstream UIs can group/filter on.
@@ -167,7 +170,8 @@ DATASET_API_IDS = {
     "Citywide Catch Basins" : "2w2g-fk3i",
     "Parks Monuments" : "6rrm-vxj9",
     "Citywide Hydrants" : "5bgh-vtsn",
-    "Street Pavement Rating" : "6yyb-pb25"
+    "Street Pavement Rating" : "6yyb-pb25",
+    "Active Projects": "3ss8-m844",
 }
 
 # Fewshots for training LLM to handle category of queries
@@ -237,6 +241,35 @@ FEWSHOTS_MULTI = [
             ],
             "confidence": 0.78,
             "borough": "Brooklyn",
+        }
+    ),
+
+    # --- Infrastructure Projects ---
+    (
+        "Which active capital projects are around the intersection of Fulton Street & Flatbush Avenue?",
+        {
+            "categories": ["Infrastructure Projects"],
+            "datasets": ["Active Projects"],
+            "confidence": 0.86,
+            "borough": "Brooklyn",
+        }
+    ),
+    (
+        "What Community Board(s) is HWS2025X in?",
+        {
+            "categories": ["Infrastructure Projects"],
+            "datasets": ["Active Projects"],
+            "confidence": 0.85,
+            "borough": "Bronx",
+        }
+    ),
+    (
+        "What Community Board is the intersection of Tillotson Ave. and Reeds Mill Ln. in?",
+        {
+            "categories": ["Infrastructure Projects"],
+            "datasets": ["Active Projects"],
+            "confidence": 0.82,
+            "borough": "Bronx",
         }
     ),
 
@@ -379,6 +412,9 @@ cat_to_ds = {
         "DOB NOW: Build - Job Application Findings",
         "Citywide Hydrants",
     ],
+    "Infrastructure Projects": [
+        "Active Projects"
+    ],
 }
 
 # Boroughs and aliases
@@ -407,6 +443,7 @@ DATASET_CONFIG = {
     "Clean Air Tracking System (CATS)": {"geo_unit": "BBL_SPLIT", "mode": "radius","surrounding":True},
     #"Population by Community Districts": {"geo_unit": None, "mode": "street","surrounding":False},
     "Population by Neighborhood Tabulation Area": {"geo_unit": "NTA Code", "mode": "street","surrounding":False},
+    "Active Projects": {"geo_unit": None, "mode": "direct", "surrounding": False, "requires_geo": False, "limit": 1000},
     # Add more dataset configurations as needed
 }
 
@@ -418,9 +455,10 @@ Classify the user's question into one or more of the following categories:
 - Construction & Permitting
 - Transportation & Traffic
 - Public Safety & Social Context
+- Infrastructure Projects
 - Comparative Site Queries
 
-Return STRICT JSON only in this format:
+Return STRICT JSON only:
 {{
   "categories": ["<labels>"],
   "datasets": ["<dataset names>"],
@@ -432,16 +470,31 @@ Core rules:
 2. Only choose datasets whose categories clearly match the user's intent.
 3. Do NOT include datasets from other categories unless explicitly justified by the wording.
 4. Use only canonical dataset names from this list: {", ".join(ALL_DATASETS)}.
-5. Category routing:
-   - Traffic, crashes, congestion, counts, speeds, hotspots → Transportation & Traffic
-   - DOB permits, job filings, street construction, water/sewer permits → Construction & Permitting
-   - Zoning, land use, districts, city-owned property → Zoning & Land Use
-   - Flooding, sewer backups, environmental exposure, air/health risks → Environmental & Health Risks
-   - Population, crime, hydrants, social context → Public Safety & Social Context
-   - Comparisons between two locations (better/worse, higher/lower) → include Comparative Site Queries + relevant categories
-6. Population-only questions should use **population datasets**, not environmental or crime datasets.
-7. When multiple categories apply, return only the datasets from the selected categories that directly answer the question.
-"""
+
+Category routing:
+- Traffic, crashes, congestion, counts, speeds, hotspots → Transportation & Traffic
+- DOB permits, job filings, street construction, water/sewer permits → Construction & Permitting
+- Zoning, land use, districts, city-owned property → Zoning & Land Use
+- Flooding, sewer backups, environmental exposure, air/health risks → Environmental & Health Risks
+- Population, crime, hydrants, social context → Public Safety & Social Context
+- Comparisons between two locations → include Comparative Site Queries + relevant categories
+
+Infrastructure Projects routing:
+- Capital projects, active projects, project IDs/codes (e.g., "HWS2025X"),
+  DDC/DEP/DOT project scopes, project timelines, project locations,
+  or "which community board is this project in" → Infrastructure Projects.
+- If Infrastructure Projects is selected, **do not add non-infra datasets**
+  unless the question *explicitly* asks about another risk (e.g., “and crashes nearby”).
+- Typical Infrastructure Projects datasets: ["Active Projects"].
+  Return ONLY from these unless explicitly required.
+
+Population-only rule:
+- Population-only questions should use population datasets, not environmental or crime datasets.
+
+When multiple categories apply:
+- Return only datasets from the selected categories that directly answer the question.
+""".strip()
+
 
 
 # LLM Prompt for it to extract locations
