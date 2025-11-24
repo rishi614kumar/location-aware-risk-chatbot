@@ -278,6 +278,16 @@ FEWSHOTS_ADDR = [
          {"house_number": "", "street_name": "149th Street & Grand Concourse", "borough": "Bronx", "raw": "149th Street & Grand Concourse", "notes": ""},
          {"house_number": "", "street_name": "181st Street & St. Nicholas Avenue", "borough": "Manhattan", "raw": "181st Street & St. Nicholas Avenue", "notes": ""}
      ]}),
+    ("Show the latest traffic counts for East 34th Street between 5th Avenue and Madison Avenue.",
+     {"addresses": [
+         {"house_number": "", "street_name": "East 34th Street & 5th Avenue", "borough": "Manhattan", "raw": "East 34th Street between 5th Avenue and Madison Avenue", "notes": "Segment: East 34th Street between 5th Ave and Madison Ave"},
+         {"house_number": "", "street_name": "East 34th Street & Madison Avenue", "borough": "Manhattan", "raw": "East 34th Street between 5th Avenue and Madison Avenue", "notes": "Segment: East 34th Street between 5th Ave and Madison Ave"}
+     ]}),
+    ("Compare traffic volumes between 240 E 38th St and 237 Park Ave.",
+     {"addresses": [
+         {"house_number": "240", "street_name": "East 38th St", "borough": "", "raw": "240 E 38th St", "notes": ""},
+         {"house_number": "237", "street_name": "Park Ave", "borough": "Manhattan", "raw": "237 Park Ave", "notes": ""}
+     ]}),
      ("Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?",
       {"addresses": [
          {"house_number": "", "street_name": "Jamaica Avenue & Parsons Boulevard", "borough": "Queens", "raw": "Jamaica Avenue", "notes": "Jamaica Avenue"},
@@ -452,6 +462,9 @@ Rules:
   intersection or address only if needed for geocoding. Mark this as an approximation in "notes".
 - If the query compares two locations ("X versus Y"), output one specific address or intersection
   for each side. If you must approximate, say so in "notes".
+- If the query describes a stretch like "Street A between Street B and Street C", emit two entries:
+  Street A & Street B and Street A & Street C. Keep the original wording in "notes"
+  (e.g., "Street A between Street B and Street C").
 - If the query says "near X", include X as a location.
 - Do NOT include cities/states/countries unless explicitly mentioned.
 - Preserve original wording/casing in "raw"; trim whitespace elsewhere.

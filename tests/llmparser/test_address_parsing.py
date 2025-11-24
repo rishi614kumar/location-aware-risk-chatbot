@@ -197,7 +197,122 @@ TEST_ADDR_PARSING = [
 ]
 
 
-ALL_CASES = TEST_ADDR_PARSING
+TEST_SEGMENT_STREET_CASES = [
+
+    # --- "between" phrasing ---
+    (
+        "Midtown corridor segment",
+        "Show me the traffic counts for East 34th Street between 5th Avenue and Madison Avenue for the latest year in the dataset, and summarise what that indicates about congestion in Midtown",
+        [
+            {
+                "house_number": "",
+                "street_name": "East 34th Street & 5th Avenue",
+                "borough": "Manhattan",
+                "raw": "East 34th Street between 5th Avenue and Madison Avenue",
+                "notes": "Segment: East 34th Street between 5th Avenue and Madison Avenue",
+            },
+            {
+                "house_number": "",
+                "street_name": "East 34th Street & Madison Avenue",
+                "borough": "Manhattan",
+                "raw": "East 34th Street between 5th Avenue and Madison Avenue",
+                "notes": "Segment: East 34th Street between 5th Avenue and Madison Avenue",
+            },
+        ],
+    ),
+
+    # --- "from X to Y" phrasing ---
+    (
+        "Flatbush corridor segment (from-to)",
+        "Analyze traffic volumes for Flatbush Avenue from Atlantic Avenue to Tillary Street for the most recent year available.",
+        [
+            {
+                "house_number": "",
+                "street_name": "Flatbush Avenue & Atlantic Avenue",
+                "borough": "Brooklyn",
+                "raw": "Flatbush Avenue from Atlantic Avenue to Tillary Street",
+                "notes": "Segment: Flatbush Avenue from Atlantic Avenue to Tillary Street",
+            },
+            {
+                "house_number": "",
+                "street_name": "Flatbush Avenue & Tillary Street",
+                "borough": "Brooklyn",
+                "raw": "Flatbush Avenue from Atlantic Avenue to Tillary Street",
+                "notes": "Segment: Flatbush Avenue from Atlantic Avenue to Tillary Street",
+            },
+        ],
+    ),
+
+    # --- "spanning" phrasing ---
+    (
+        "Queens Blvd spanning segment",
+        "Provide the latest traffic counts for the stretch of Queens Boulevard spanning 50th Street to 55th Street.",
+        [
+            {
+                "house_number": "",
+                "street_name": "Queens Boulevard & 50th Street",
+                "borough": "Queens",
+                "raw": "Queens Boulevard spanning 50th Street to 55th Street",
+                "notes": "Segment: Queens Boulevard spanning 50th Street to 55th Street",
+            },
+            {
+                "house_number": "",
+                "street_name": "Queens Boulevard & 55th Street",
+                "borough": "Queens",
+                "raw": "Queens Boulevard spanning 50th Street to 55th Street",
+                "notes": "Segment: Queens Boulevard spanning 50th Street to 55th Street",
+            },
+        ],
+    ),
+
+    # --- "bounded by" phrasing ---
+    (
+        "Broadway bounded segment",
+        "Get traffic volume statistics for Broadway bounded by West 72nd Street and West 79th Street.",
+        [
+            {
+                "house_number": "",
+                "street_name": "Broadway & West 72nd Street",
+                "borough": "Manhattan",
+                "raw": "Broadway bounded by West 72nd Street and West 79th Street",
+                "notes": "Segment: Broadway bounded by West 72nd Street and West 79th Street",
+            },
+            {
+                "house_number": "",
+                "street_name": "Broadway & West 79th Street",
+                "borough": "Manhattan",
+                "raw": "Broadway bounded by West 72nd Street and West 79th Street",
+                "notes": "Segment: Broadway bounded by West 72nd Street and West 79th Street",
+            },
+        ],
+    ),
+
+
+    # --- "corridor along" phrasing ---
+    (
+        "7th Avenue corridor along",
+        "Show traffic counts for the corridor along 7th Avenue from West 23rd Street to West 30th Street.",
+        [
+            {
+                "house_number": "",
+                "street_name": "7th Avenue & West 23rd Street",
+                "borough": "Manhattan",
+                "raw": "7th Avenue from West 23rd Street to West 30th Street",
+                "notes": "Segment: 7th Avenue from West 23rd Street to West 30th Street",
+            },
+            {
+                "house_number": "",
+                "street_name": "7th Avenue & West 30th Street",
+                "borough": "Manhattan",
+                "raw": "7th Avenue from West 23rd Street to West 30th Street",
+                "notes": "Segment: 7th Avenue from West 23rd Street to West 30th Street",
+            },
+        ],
+    ),
+
+]
+
+ALL_CASES = TEST_ADDR_PARSING + TEST_SEGMENT_STREET_CASES
 
 
 # ------------------ Tests ------------------
