@@ -144,7 +144,7 @@ class AzureOpenAIBackend(ChatBackend):
         response = self._client.chat.completions.create(
             model=self._deployment,
             messages=self._chat_history
-            **self._generation_config
+            # **self._generation_config
         )
 
         reply = response.choices[0].message.content
