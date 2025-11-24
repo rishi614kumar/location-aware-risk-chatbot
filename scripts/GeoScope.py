@@ -251,7 +251,6 @@ def _build_where_for_geo_unit(
     if geo_unit in ("LONLAT", "COORD"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         coords = [lonlat.split(',') for lonlat in ids]
-        conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
         geometry_col = col_name.get("geometry", None)
         conds = " OR ".join([
             f"within_circle({geometry_col},{lat}, {lon}, 100)"
