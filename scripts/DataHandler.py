@@ -1,15 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
-from sodapy import Socrata
-from dotenv import load_dotenv
-
 import pandas as pd
 import geopandas as gpd
 import os
-import time
 from config import settings
 from config.logger import logger
+from api.socrata_client import SocrataClient
 
 # Configuration has been moved to config.settings; create local aliases for compatibility.
 DATASET_DESCRIPTIONS: Dict[str, str] = settings.DATASET_DESCRIPTIONS
@@ -125,32 +122,8 @@ class DataSet:
         if not api_id:
             raise NotImplementedError(f"No API mapping configured for dataset '{self.name}'")
 
-        client = client = Socrata(domain, None)
-        params = {}
-        if limit is not None:
-            params["limit"] = limit
-        if where:
-            params["where"] = where
-
-        retries = 3
-        delay = 1.0
-        last_err = None
-        for attempt in range(retries):
-            try:
-                results = client.get(api_id, **params)
-                return pd.DataFrame.from_records(results)
-            except Exception as e:
-                last_err = e
-                msg = str(e)
-                if "503" in msg or "throttling" in msg.lower():
-                    logger.warning(f"Attempt {attempt+1}/{retries} 503/throttle for {self.name}; retrying in {delay:.1f}s")
-                    time.sleep(delay)
-                    delay *= 2
-                    continue
-                logger.error(f"Non-retryable error for {self.name}: {e}")
-                break
-        logger.error(f"Failed to fetch {self.name} after {retries} attempts: {last_err}")
-        return pd.DataFrame()  # empty fallback
+        client = SocrataClient(domain=domain)
+        return client.fetch(api_id, where=where, limit=limit)
 
     @property
     def df(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
