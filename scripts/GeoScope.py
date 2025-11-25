@@ -12,7 +12,7 @@ from adapters.coords import get_lonlat_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl
-from config.settings import DATASET_CONFIG
+from config.settings import DATASET_CONFIG, BORO_CODE_MAP
 from config.logger import logger
 
 def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
@@ -119,7 +119,7 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
     return nearby_bbls
 
 
-def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional[str]:
+def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str], borough_type: str, borough_form: int,col_name: Dict, col_digit: Dict) -> Optional[str]:
     """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
     geo_unit = (geo_unit or "BBL").upper()
     if not bbls_to_use:
@@ -132,7 +132,7 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit)
         vals = ",".join(f"'{p}'" for p in ids)
-        return f"Precinct IN ({vals})" if vals else None
+        return f"PCT in [{vals}]" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)
@@ -146,31 +146,63 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str]) -> Optional
 
     if geo_unit in ("LONLAT", "COORD"):
         ids = get_surrounding_units(bbls_to_use, geo_unit)
-        coords = [lonlat.split(',') for lonlat in ids]
-        conds = " OR ".join([f"(Longitude={lon} AND Latitude={lat})" for lon, lat in coords])
+        coords = [tuple(map(float, lonlat.split(','))) for lonlat in ids]
+        geometry_col = col_name.get("geometry", None)
+        conds = " OR ".join([
+            f"within_circle({geometry_col},{lat}, {lon}, 100)"
+            for lon, lat in coords
+        ])
         return conds or None
+    
+    if geo_unit == "BOROUGH":
+        boro_list = []
+        for full_bbl in bbls_to_use:
+            try:
+                s = str(full_bbl)
+                boro = s[0]
+                if borough_type.isalpha():
+                    boro_options = BORO_CODE_MAP.get(boro, [boro])
+                    boro = boro_options[borough_form] if borough_form < len(boro_options) else boro
+                boro_list.append(boro)
+            except Exception:
+                continue
+        if boro_list:
+            borough_col = col_name.get("borough", "borough")
+            boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
+            return f"{borough_col} IN ({boro_vals})"
+        return None
 
     if geo_unit == "BBL_SPLIT":
         boro_list, block_list, lot_list = [], [], []
+        col_lot = col_digit.get("lot", "0002")
+        adding_zero = True if len(col_lot) == 5 else False
         for full_bbl in bbls_to_use:
             try:
                 s = str(full_bbl)
                 boro = s[0]
                 block = s[1:6]
                 lot = s[6:]
+                if borough_type.isalpha():
+                    boro_options = BORO_CODE_MAP.get(boro, [boro])
+                    boro = boro_options[borough_form] if borough_form < len(boro_options) else boro
+                if adding_zero:
+                    lot = lot.zfill(5)
                 boro_list.append(boro)
                 block_list.append(block)
                 lot_list.append(lot)
             except Exception:
                 continue
         if boro_list and block_list and lot_list:
+            borough_col = col_name.get("borough", "borough")
+            block_col = col_name.get("block", "block")
+            lot_col = col_name.get("lot", "lot")
             boro_vals = ",".join(f"'{b}'" for b in sorted(set(boro_list)))
             block_vals = ",".join(f"'{b}'" for b in sorted(set(block_list)))
             lot_vals = ",".join(f"'{b}'" for b in sorted(set(lot_list)))
             return (
-                f"Borough IN ({boro_vals}) "
-                f"AND Block IN ({block_vals}) "
-                f"AND Lot IN ({lot_vals})"
+                f"{borough_col} IN ({boro_vals}) "
+                f"AND {block_col} IN ({block_vals}) "
+                f"AND {lot_col} IN ({lot_vals})"
             )
         return None
 
@@ -185,11 +217,15 @@ def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_
         ds_name = ds.name
         ds_conf = DATASET_CONFIG.get(ds_name, {})
         geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+        borough_type = ds_conf.get("Borough", "")
+        borough_form = ds_conf.get("Borough_form", 0) 
+        col_name = ds_conf.get("col_names", {}) 
+        col_digit = ds_conf.get("cols", {})
         mode = ds_conf.get("mode", "street")
         want_surrounding = ds_conf.get("surrounding", False)
         try:
             bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
-            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use)
+            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, borough_type, borough_form,col_name,col_digit)
             if where_str:
                 filters[ds_name] = {"where": where_str, "limit": 1000}
                 logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
