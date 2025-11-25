@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Dict, Any, Protocol
 from dotenv import load_dotenv
+from config.logger import logger
 
 load_dotenv()
 
@@ -58,11 +59,72 @@ class GeminiBackend(ChatBackend):
             )
         self._chat = self._model.start_chat(history=history or [])
 
-    def send(self, message: str) -> str:
+    def send(self, message: str, max_retries: int = 3) -> str:
+        """
+        Send a message to the chat with retry logic and error handling.
+        
+        Args:
+            message: The message to send
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            The response text from the API
+            
+        Raises:
+            BlockedPromptException: If content is blocked by safety filters after retries
+            Exception: Other API errors after retries are exhausted
+        """
         if self._chat is None:
             self.start()
-        resp = self._chat.send_message(message)
-        return getattr(resp, "text", "") or ""
+        
+        # Import exception types dynamically to avoid import errors if package not installed
+        try:
+            from google.generativeai.types import generation_types
+            BlockedPromptExceptionType = generation_types.BlockedPromptException
+        except ImportError:
+            # Fallback if import fails
+            BlockedPromptExceptionType = Exception
+        
+        last_exception = None
+        
+        for attempt in range(max_retries + 1):  # +1 for initial attempt
+            try:
+                resp = self._chat.send_message(message)
+                return getattr(resp, "text", "") or ""
+            except BlockedPromptExceptionType as e:
+                # Retry blocked prompts - sometimes they're transient or can succeed on retry
+                logger.warning(f"Content blocked by safety filters: {e}. Retrying...")
+                last_exception = e
+                # Extract block reason from exception for logging
+                block_reason = "UNKNOWN"
+                try:
+                    if hasattr(e, 'prompt_feedback'):
+                        feedback = e.prompt_feedback
+                        if hasattr(feedback, 'block_reason'):
+                            block_reason = str(feedback.block_reason)
+                        elif isinstance(feedback, dict):
+                            block_reason = feedback.get('block_reason', 'UNKNOWN')
+                    # Also check if block_reason is directly on the exception
+                    if hasattr(e, 'block_reason'):
+                        block_reason = str(e.block_reason)
+                except Exception:
+                    # If we can't extract the reason, use the exception message
+                    block_reason = str(e) or "UNKNOWN"
+                
+                # Retry blocked prompts instantly
+                if attempt < max_retries:
+                    continue
+                else:
+                    # Exhausted retries - raise custom exception
+                    error_msg = f"Content blocked by safety filters after {max_retries + 1} attempts (reason: {block_reason})"
+                    raise BlockedPromptException(error_msg, e) from e
+            except Exception as e:
+                logger.warning(f"Error sending message: {e}. Retrying...")
+                last_exception = e
+                continue
+        
+        # If we get here, we've exhausted retries
+        raise Exception(f"Failed to send message after {max_retries + 1} attempts: {last_exception}") from last_exception
 
     def history(self) -> List[Dict[str, Any]]:
         return [] if self._chat is None else self._chat.history
@@ -78,6 +140,14 @@ class OpenAIBackend(ChatBackend):
 
 class AnthropicBackend(ChatBackend):
     def __init__(self, **kwargs): raise NotImplementedError
+
+# ---------- Custom Exceptions ----------
+
+class BlockedPromptException(Exception):
+    """Raised when content is blocked by API safety filters."""
+    def __init__(self, message: str, original_exception: Exception = None):
+        super().__init__(message)
+        self.original_exception = original_exception
 
 # ---------- Factory ----------
 
