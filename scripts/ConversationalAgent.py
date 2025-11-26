@@ -128,7 +128,7 @@ class ConversationalAgent:
         logger.info(f"Surrounding decision: {surrounding_decision}")
 
         aggregate_task = None
-        if surrounding_decision == "include_surrounding":
+        if surrounding_decision in ("include_surrounding", "use_span"):
             aggregate_task = asyncio.create_task(self.units["aggregate_surrounding"].run(context))
         else:
             context["nearby_bbls"] = context.get("resolved_bbls", [])  # use only target

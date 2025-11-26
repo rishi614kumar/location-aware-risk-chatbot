@@ -111,15 +111,19 @@ class ResolveBBLsUnit(ConversationalUnit):
     def __init__(self):
         super().__init__("resolve_bbls")
     async def run(self, context):
-        from scripts.GeoScope import resolve_geo_bundles_from_addresses
+        from scripts.GeoScope import resolve_geo_bundles_from_addresses, resolve_bbls_from_street_spans
         addresses = context.get("parsed_result", {}).get('address', [])
         resolution = await asyncio.to_thread(resolve_geo_bundles_from_addresses, addresses)
         resolved_bbls = resolution.bbls
+        span_bbls = resolve_bbls_from_street_spans(resolution)
         bundle_lookup = {bundle.bbl: bundle for bundle in resolution.bundles if bundle and bundle.bbl}
         context["resolved_bbls"] = resolved_bbls
+        context["span_bbls"] = span_bbls
         context["geo_bundles"] = resolution.bundles
         context["bundle_lookup"] = bundle_lookup
         logger.info(f"Resolved BBLs: {resolved_bbls}")
+        if span_bbls:
+            logger.info(f"Street span BBLs: {len(span_bbls)}")
         return context
 
 class AggregateSurroundingBBLsUnit(ConversationalUnit):
@@ -128,7 +132,14 @@ class AggregateSurroundingBBLsUnit(ConversationalUnit):
     async def run(self, context):
         from scripts.GeoScope import aggregate_surrounding_bbls
         resolved_bbls = context.get("resolved_bbls", [])
-        nearby_bbls = await asyncio.to_thread(aggregate_surrounding_bbls, resolved_bbls, True)
+        span_bbls = context.get("span_bbls") or []
+
+        if span_bbls:
+            nearby_bbls = span_bbls
+            context["force_nearby_span"] = True
+        else:
+            nearby_bbls = await asyncio.to_thread(aggregate_surrounding_bbls, resolved_bbls, True)
+            context["force_nearby_span"] = False
         context["nearby_bbls"] = nearby_bbls
         logger.info(f"Nearby BBLs: {len(nearby_bbls)}")
         return context
@@ -142,12 +153,14 @@ class BuildDatasetFiltersUnit(ConversationalUnit):
         resolved_bbls = context.get("resolved_bbls", [])
         nearby_bbls = context.get("nearby_bbls", [])
         bundle_lookup = context.get("bundle_lookup")
+        force_nearby_span = context.get("force_nearby_span", False)
         dataset_filters = await asyncio.to_thread(
             build_dataset_filters_for_handler,
             handler,
             resolved_bbls,
             nearby_bbls,
             bundle_lookup=bundle_lookup,
+            force_nearby=force_nearby_span,
         )
         context["dataset_filters"] = dataset_filters
         return context
@@ -314,9 +327,14 @@ class SurroundingDecisionUnit(ConversationalUnit):
         user_text = context["user_text"]
         chat_history = context["chat_history"]
         parsed_result = context.get("parsed_result", {})
-        decision_prompt = get_surrounding_decision_prompt(user_text, chat_history, parsed_result)
+        span_bbls = context.get("span_bbls") or []
+        decision_prompt = get_surrounding_decision_prompt(user_text, chat_history, parsed_result, span_bbls)
         decision = (await asyncio.to_thread(self.llm_chat.ask, decision_prompt)).strip().lower()
-        if decision not in ("include_surrounding", "target_only"):
+
+        valid_choices = {"include_surrounding", "target_only", "use_span"}
+        if decision not in valid_choices:
+            decision = "use_span" if span_bbls else "target_only"
+        if decision == "use_span" and not span_bbls:
             decision = "target_only"
         context["surrounding_decision"] = decision
         return context
