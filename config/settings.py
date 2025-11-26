@@ -149,7 +149,7 @@ DATASET_API_IDS = {
     "NYC OpenData Zoning and Tax Lot Database" : "fdkv-4t4z",
     "NYC OpenData Automated Traffic Volume Counts" : "7ym2-wayt",
     "NYC OpenData Motor Vehicle Collisions" : "h9gi-nx95",
-    "DOB Permits" : "ipu4-2q9a",
+    "DOB permits" : "ipu4-2q9a",
     "Asbestos Control Program" : "vq35-j9qm",
     "Digital City Map Shapefile" : "y23c-72fa",
     "Historic Districts map" : "skyk-mpzq",

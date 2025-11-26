@@ -1,6 +1,7 @@
 # scripts/RiskSummarizer.py
-from llm.LLMInterface import Chat, make_backend
+from llm.LLMInterface import Chat, make_backend, BlockedPromptException
 from config.logger import logger
+from config.settings import DATASET_CONFIG
 
 def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat = None) -> str:
     """
@@ -29,33 +30,141 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
     Furthermore, we have identified that the question is related to the following dataset(s): \n
     {datasets} \n
     These datasets are geo-referenced datasets, meaning that each row corresponds to a certain location.
-    From these datasets, we have extracted the rows corresponding to locations that are located on 
-    street segments that touch the address(es) provided. \n
+    Depending on the dataset, we either extract the rows corresponding to the exact address(es) provided,
+    or the rows corresponding to the surrounding area of the address(es) provided. Furthermore, each dataset
+    has a specific geographic unit that is used to extract the rows. The geo-unit that is used to extract the
+    rows will also be specified for each dataset below. \n
 
-    Below, I will provide the name of each dataset, a description of the dataset, and the extracted rows as mentioned above. \n\n
+    Sometimes, a dataset may not have any rows corresponding to the exact address(es) provided, or
+    even for the surrounding area. In this case, you will see no rows for that dataset. In that
+    case, it is up to you to decide, based on the dataset's description, the user's question and your general knowledge, 
+    whether to include the dataset in the summary or not. For example, for some datasets and a specific question, the fact
+    that no rows are found for the exact address(es) provided or the surrounding area, may be very informative to the user's question.
+    Whereas for other datasets and a specific question, the fact that no rows are found might not be informative and thus this should
+    not be included in the summary.
+
+    Furthermore, for each dataset, I will provide a pandas summary of the extracted rows. Only use this information if it is relevant.
+
+    Below, I will provide the name of each dataset, a description of the dataset, whether the rows are extracted from the exact address(es) or the surrounding area,
+     and the extracted rows as mentioned above. \n\n
     """)   
     if data_handler:
         for ds in data_handler:
+            # Get scope information from DATASET_CONFIG
+            # if not in DATASET_CONFIG, use default values (these are the defaults used in this case)
+            ds_config = DATASET_CONFIG.get(ds.name, {}) 
+            surrounding = ds_config.get("surrounding", False)
+            mode = ds_config.get("mode", "street")
+            geo_unit = ds_config.get("geo_unit", "BBL")
+            
+            # Determine scope description
+            if surrounding:
+                scope_desc = f"surrounding area (using {mode} mode with {geo_unit} filtering)"
+            else:
+                scope_desc = f"exact address(es) only (using {geo_unit} filtering)"
+            
             prompt += (f"""
                 Extracted data for dataset:{ds.name}:
+                
                 Which has the following description: {ds.description}
+                Geographic scope: Data extracted from {scope_desc}
                 Extracted rows: \n \n
                 {ds.df.to_markdown(index=False)} \n \n
+                Pandas summary of the extracted rows: \n \n
+                {ds.df.describe().to_string() if len(ds.df) > 0 else "No rows found for this dataset"} \n \n
             """)
             logger.info(f"length of extracted rows for {ds.name}: {len(ds.df)}")
     prompt += (f"""
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
-    # print("Prompt for risk summarization: \n", prompt)
-    if llm_chat:
-        response = llm_chat.ask(prompt)
-        logger.info(f"Response from risk summarization: {response}")
-        return response
-    else:
-        chat = Chat(make_backend(provider="gemini"))
-        chat.start()
-        response = chat.ask(prompt)
-        chat.reset()
-        logger.info(f"Response from risk summarization: {response}")
-    return response
+    
+    # Try to get LLM response with error handling
+    try:
+        if llm_chat:
+            response = llm_chat.ask(prompt)
+            logger.info(f"Response from risk summarization: {response}")
+            return response
+        else:
+            chat = Chat(make_backend(provider="gemini"))
+            chat.start()
+            response = chat.ask(prompt)
+            chat.reset()
+            logger.info(f"Response from risk summarization: {response}")
+            return response
+    except BlockedPromptException as e:
+        # Handle content blocking - provide a fallback summary
+        logger.warning(f"Content blocked by safety filters: {e}. Generating fallback summary.")
+        return _generate_fallback_summary(user_text, parsed_result, data_handler)
+    except Exception as e:
+        # Handle other API errors
+        logger.error(f"Error calling LLM API: {e}. Generating fallback summary.")
+        return _generate_fallback_summary(user_text, parsed_result, data_handler)
+
+
+def _generate_fallback_summary(user_text: str, parsed_result: dict, data_handler=None, max_rows_per_dataset: int = 20) -> str:
+    """
+    Generate a fallback summary when LLM API fails or content is blocked.
+    Provides a structured summary based on available data without LLM processing.
+    
+    Args:
+        user_text: The original user question
+        parsed_result: Parsed result dictionary
+        data_handler: DataHandler instance with datasets
+        max_rows_per_dataset: Maximum number of rows to show per dataset (default: 20)
+    """
+    cats = parsed_result.get('categories', [])
+    addresses = parsed_result.get('address', [])
+    datasets = parsed_result.get('dataset_names', [])
+    
+    summary_parts = [
+        f"I apologize, but I encountered an issue processing your request with the AI model.",
+        f"However, I can provide you with the following information based on your query:",
+        "",
+        f"**Your Question:** {user_text}",
+        "",
+        f"**Relevant Categories:** {', '.join(cats) if cats else 'N/A'}",
+        f"**Address(es):** {', '.join(a.get('raw', '') for a in addresses) if addresses else 'N/A'}",
+        f"**Datasets Analyzed:** {', '.join(datasets) if datasets else 'N/A'}",
+    ]
+    
+    if data_handler:
+        summary_parts.append("")
+        summary_parts.append("**Retrieved Data:**")
+        for ds in data_handler:
+            row_count = len(ds.df) if hasattr(ds, 'df') else 0
+            summary_parts.append("")
+            summary_parts.append(f"### {ds.name}")
+            if hasattr(ds, 'description') and ds.description:
+                summary_parts.append(f"*{ds.description}*")
+            
+            if row_count > 0:
+                summary_parts.append(f"**Total records found:** {row_count}")
+                
+                # Show actual data (limited to max_rows_per_dataset)
+                try:
+                    df_to_show = ds.df.head(max_rows_per_dataset)
+                    if hasattr(df_to_show, 'to_markdown'):
+                        summary_parts.append("")
+                        summary_parts.append("**Data (showing first {} rows):**".format(min(row_count, max_rows_per_dataset)))
+                        summary_parts.append("")
+                        summary_parts.append(df_to_show.to_markdown(index=False))
+                        if row_count > max_rows_per_dataset:
+                            summary_parts.append(f"\n*... and {row_count - max_rows_per_dataset} more row(s) not shown*")
+                    else:
+                        # Fallback if to_markdown is not available
+                        summary_parts.append("")
+                        summary_parts.append("**Data (showing first {} rows):**".format(min(row_count, max_rows_per_dataset)))
+                        summary_parts.append("")
+                        summary_parts.append(str(df_to_show))
+                except Exception as e:
+                    logger.warning(f"Error formatting data for {ds.name}: {e}")
+                    summary_parts.append(f"*Error displaying data: {e}*")
+            else:
+                summary_parts.append("**No records found** for the specified location(s)")
+    
+    summary_parts.append("")
+    summary_parts.append("---")
+    summary_parts.append("**Note:** Due to content filtering restrictions or API errors, I was unable to generate a detailed AI-powered analysis. Please review the data above for specific information about your query.")
+    
+    return "\n".join(summary_parts)
 

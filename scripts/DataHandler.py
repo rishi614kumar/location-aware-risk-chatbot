@@ -1,6 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from sodapy import Socrata
+from dotenv import load_dotenv
+import duckdb
 import pandas as pd
 import geopandas as gpd
 import os
@@ -112,10 +115,34 @@ class DataSet:
                 raise FileNotFoundError(f"No path configured for flatfile dataset '{self.name}'")
             df = load_flatfile_dataset(self.name, path, layer=layer)
             if where:
+                # DuckDB connection + registration
+                con = duckdb.connect()
                 try:
-                    df = df.query(where)
-                except Exception:
-                    pass
+                    con.register("flatfile_df", df)
+                    query = f"SELECT * FROM flatfile_df WHERE {where}"
+                    filtered = con.execute(query).df()
+                    logger.info(
+                        f"Flatfile filter applied for dataset '{self.name}' where="
+                        f"{where!r} rows_before={len(df)} rows_after={len(filtered)}"
+                    )
+                    df = filtered
+                except duckdb.Error as exc:
+                    logger.warning(
+                        f"Flatfile filter FAILED (DuckDB) for dataset '{self.name}' where={where!r}: {exc}; "
+                        f"returning unfiltered data rows={len(df)}"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Flatfile filter FAILED (other) for dataset '{self.name}' where={where!r}: {exc}; "
+                        f"returning unfiltered data rows={len(df)}"
+                    )
+                finally:
+                    try:
+                        con.close()
+                    except Exception:
+                        logger.warning(
+                        f"duckdb connection close FAILED for dataset '{self.name}'"
+                    )
             if limit is not None:
                 df = df.head(limit)
             return df
