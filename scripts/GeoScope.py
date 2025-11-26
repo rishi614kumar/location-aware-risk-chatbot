@@ -338,14 +338,20 @@ def resolve_bbls_from_street_spans(resolution: GeoResolution) -> List[str]:
 def _build_where_for_geo_unit(
     geo_unit: str,
     bbls_to_use: List[str],
-    borough_type: str, borough_form: int,col_name: Dict, col_digit: Dict,
     *,
     bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+    borough_type: str = "",
+    borough_form: int = 0,
+    col_name: Optional[Dict[str, str]] = None,
+    col_digit: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
     """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
     geo_unit = (geo_unit or "BBL").upper()
     if not bbls_to_use:
         return None
+
+    col_name = col_name or {}
+    col_digit = col_digit or {}
 
     if geo_unit == "BBL":
         vals = ",".join(f"'{b}'" for b in bbls_to_use)
@@ -354,7 +360,8 @@ def _build_where_for_geo_unit(
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{p}'" for p in ids)
-        return f"PCT IN [{vals}]" if vals else None
+        pct_col = col_name.get("precinct", "Precinct")
+        return f"{pct_col} IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
@@ -368,8 +375,8 @@ def _build_where_for_geo_unit(
 
     if geo_unit in ("LONLAT", "COORD"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
-        coords = [lonlat.split(',') for lonlat in ids]
-        geometry_col = col_name.get("geometry", None)
+        coords = [lonlat.split(',') for lonlat in ids if "," in lonlat]
+        geometry_col = col_name.get("geometry", "") or "geometry"
         conds = " OR ".join([
             f"within_circle({geometry_col},{lat}, {lon}, 100)"
             for lon, lat in coords
@@ -453,7 +460,15 @@ def _build_filter_for_dataset(
     try:
         use_nearby = want_surrounding or force_nearby
         bbls_to_use = nearby_bbls if use_nearby else (resolved_bbls[:1] if resolved_bbls else [])
-        where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, bundle_lookup=bundle_lookup)
+        where_str = _build_where_for_geo_unit(
+            geo_unit,
+            bbls_to_use,
+            bundle_lookup=bundle_lookup,
+            borough_type=borough_type,
+            borough_form=borough_form,
+            col_name=col_name,
+            col_digit=col_digit,
+        )
         if where_str:
             filter_def = {"where": where_str, "limit": 1000}
             logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
