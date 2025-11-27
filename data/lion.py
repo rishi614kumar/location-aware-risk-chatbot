@@ -8,7 +8,7 @@ import fiona
 import geopandas as gpd
 import numpy as np
 
-from config.settings import LION_GDB_PATH 
+from config.settings import LION_GDB_PATH, LION14_GDB_PATH
 
 # ------------------------------
 # Internal helpers
@@ -81,6 +81,23 @@ def _load_lion_base(layer: Optional[str] = None) -> gpd.GeoDataFrame:
     lion.sindex  # build spatial index
     return lion
 
+@lru_cache(maxsize=4)  # cache per layer key
+def _load_lion14_base(layer: Optional[str] = None) -> gpd.GeoDataFrame:
+    """
+    Read LION once (per layer), normalize CRS to EPSG:2263, add standardized columns,
+    and build a spatial index.
+    """
+    path = LION14_GDB_PATH
+    if not path or not os.path.exists(path):
+        raise FileNotFoundError(f"LION GDB not found: {path}")
+
+    lyr = layer or _pick_layer(path, prefer_substr="lion")
+    lion = gpd.read_file(path, layer=lyr)
+    lion = _ensure_2263(lion)
+    lion = _normalize_columns(lion)
+    lion.sindex  # build spatial index
+    return lion
+
 # ------------------------------
 # Public “views” (no extra I/O)
 # ------------------------------
@@ -92,7 +109,17 @@ def load_lion_geom(layer: Optional[str] = None) -> gpd.GeoDataFrame:
       returns columns ['_street_name', '_width_ft', 'geometry']
     """
     gdf = _load_lion_base(layer)
-    keep = ["_street_name", "_width_ft", "geometry"]
+    keep = ["_street_name", "_width_ft", "geometry","SegmentID"]  # include SegmentID for external use
+    return gdf[keep].copy()
+
+@lru_cache(maxsize=4)
+def load_lion14_geom(layer: Optional[str] = None) -> gpd.GeoDataFrame:
+    """
+    Geometry-only view with standardized helper columns:
+      returns columns ['_street_name', '_width_ft', 'geometry']
+    """
+    gdf = _load_lion14_base(layer)
+    keep = ["_street_name", "_width_ft", "geometry","SegmentID"]  # include SegmentID for external use
     return gdf[keep].copy()
 
 @lru_cache(maxsize=4)

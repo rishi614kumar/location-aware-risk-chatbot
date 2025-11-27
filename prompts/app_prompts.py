@@ -113,23 +113,36 @@ def get_show_data_decision_prompt(user_text, chat_history, parsed_result):
         f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and parsed result: '{parsed_result}', decide if the user is requesting to see the actual data preview. Respond with 'show_data' if they want to see it, or 'hide_data' if they do not'.)"
     )
 
-def get_reuse_parsed_decision_prompt(user_text, chat_history, last_parsed_result):
-    """
-    Prompt for LLM to decide if the last parsed datasets/addresses should be reused or reparsed.
-    Respond with either 'reuse' or 'reparse'.
-    """
+def get_reuse_address_decision_prompt(user_text, chat_history, last_addresses):
+    """Prompt for deciding whether to reuse previously parsed addresses."""
+    addresses_text = ", ".join(a.get('raw', '') or str(a) for a in last_addresses) if last_addresses else "None"
     return (
-        f"$(META-PROMPT: Given the user's query: '{user_text}', chat history: '{chat_history}', and the last parsed result: '{last_parsed_result}', decide if you should reuse the last parsed datasets and addresses, or reparse from the new query. Respond with either 'reuse' or 'reparse'.)"
+        f"$(META-PROMPT: The user's new message is: '{user_text}'. Chat history: '{chat_history}'."
+        f" The last known addresses are: '{addresses_text}'. Decide whether to reuse the existing addresses or extract new ones from the latest user message."
+        " Default to 'reuse' when the user is continuing the same discussion without providing a clearly different address, intersection, neighborhood, borough, precinct, or other geographic reference."
+        " Choose 'reparse' only when the user explicitly supplies a new or conflicting location needing fresh parsing. Respond with either 'reuse' or 'reparse'.)"
     )
 
-def get_surrounding_decision_prompt(user_text, chat_history, parsed_result):
-    """Prompt for deciding whether to include surrounding BBLs (spatial expansion) or only the target BBLs.
-    Respond with either 'include_surrounding' or 'target_only'."""
+
+def get_reuse_dataset_decision_prompt(user_text, chat_history, last_datasets):
+    """Prompt for deciding whether to reuse previously parsed datasets."""
+    datasets_text = ", ".join(last_datasets) if last_datasets else "None"
     return (
-        "$(META-PROMPT: The user query is: '" + str(user_text) + "'. Chat history: '" + str(chat_history) + "'. Parsed result: '" + str(parsed_result) + "'.\n"
-        "Decide if spatial expansion to surrounding parcels/units (nearby BBLs, precincts, etc.) is warranted.\n"
-        "Choose 'include_surrounding' if the user asks for broader area context, neighborhood, surrounding blocks, nearby risk, comparative analysis, or aggregates.\n"
-        "Choose 'target_only' if the user focuses strictly on the exact provided address/intersection or wants precise data only for that location.\n"
-        "Respond with ONLY 'include_surrounding' or 'target_only'.)"
+        f"$(META-PROMPT: The user's new message is: '{user_text}'. Chat history: '{chat_history}'."
+        f" The last selected datasets are: '{datasets_text}'. Decide whether to reuse these datasets or infer a new set from the latest user message."
+        " Default to 'reuse' when the user is following up on the same analysis without asking for additional or different datasets."
+        " Choose 'reparse' only if the user clearly requests different datasets, categories, or data views. Respond with either 'reuse' or 'reparse'.)"
     )
 
+def get_surrounding_decision_prompt(user_text, chat_history, parsed_result, span_bbls=None):
+    """Prompt for deciding whether to include surrounding BBLs (spatial expansion), only the target, or a street-span corridor."""
+    span_info = "Span BBLs detected: " + ", ".join(span_bbls or []) if span_bbls else "No span BBLs detected"
+    return (
+        "$(META-PROMPT: The user query is: '" + str(user_text) + "'. Chat history: '" + str(chat_history) + "'. Parsed result: '" + str(parsed_result) + "'. "
+        + span_info + ".\n"
+        "Decide the spatial scope for analysis.\n"
+        "- Choose 'use_span' when the user specifies a street segment between two intersections; use the provided span BBLs if available.\n"
+        "- Choose 'include_surrounding' when the user wants broader context (surrounding blocks, neighborhood, nearby risk, comparative analysis).\n"
+        "- Choose 'target_only' when they want only the exact provided address/intersection without expansion.\n"
+        "Respond with ONLY one of: 'use_span', 'include_surrounding', 'target_only'.)"
+    )

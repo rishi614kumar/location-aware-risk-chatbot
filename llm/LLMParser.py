@@ -188,6 +188,41 @@ def _record_from_raw(raw: str) -> Dict[str, str]:
     }
 
 
+def _expand_between_segments(record: Dict[str, str]) -> List[Dict[str, str]]:
+    text = (record.get("raw") or record.get("street_name") or "").strip()
+    if not text:
+        return [record]
+    match = _BETWEEN_RE.search(text)
+    if not match:
+        return [record]
+
+    def _clean(value: str) -> str:
+        return re.sub(r"[.,]$", "", value.strip())
+
+    main = _clean(match.group("main"))
+    cross1 = _clean(match.group("cross1"))
+    cross2 = _clean(match.group("cross2"))
+    if not (main and cross1 and cross2):
+        return [record]
+
+    base_notes = record.get("notes") or f"{main} between {cross1} and {cross2}".strip()
+    raw_text = record.get("raw") or text
+    borough = record.get("borough", "")
+
+    expanded: List[Dict[str, str]] = []
+    for cross in (cross1, cross2):
+        expanded.append(
+            {
+                "house_number": "",
+                "street_name": f"{main} & {cross}",
+                "borough": borough,
+                "raw": raw_text,
+                "notes": base_notes,
+            }
+        )
+    return expanded
+
+
 def _normalize_dedupe(seq: Optional[List[Any]]) -> List[Dict[str, str]]:
     """
     Clean and deduplicate address objects while enforcing the required keys.
@@ -196,28 +231,29 @@ def _normalize_dedupe(seq: Optional[List[Any]]) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
     for item in seq or []:
         if isinstance(item, dict):
-            record = {
+            base_record = {
                 "house_number": str(item.get("house_number", "") or "").strip(),
                 "street_name": str(item.get("street_name", "") or "").strip(),
                 "borough": str(item.get("borough", "") or "").strip(),
                 "raw": str(item.get("raw", "") or "").strip(),
                 "notes": str(item.get("notes", "") or "").strip(),
             }
-            if not record["raw"]:
-                record["raw"] = record["street_name"] or record["house_number"]
+            if not base_record["raw"]:
+                base_record["raw"] = base_record["street_name"] or base_record["house_number"]
         else:
-            record = _record_from_raw(str(item))
+            base_record = _record_from_raw(str(item))
 
-        key = (
-            record["house_number"],
-            record["street_name"],
-            record["borough"],
-            record["raw"],
-            record["notes"],
-        )
-        if record["raw"] and key not in seen:
-            seen.add(key)
-            out.append(record)
+        for record in _expand_between_segments(base_record):
+            key = (
+                record["house_number"],
+                record["street_name"],
+                record["borough"],
+                record["raw"],
+                record["notes"],
+            )
+            if record["raw"] and key not in seen:
+                seen.add(key)
+                out.append(record)
     return out
 
 # Heuristics for fallback
@@ -237,6 +273,10 @@ _POI_HINT_WORDS = {
 # letters, numbers, apostrophes, ampersands, hyphens, or periods.
 # Example: "New York University" or "St. John's Plaza".
 _PROPER_NOUN_SPAN = re.compile(r"\b([A-Z][\w'&.-]*(?:\s+[A-Z][\w'&.-]*){0,4})\b")
+_BETWEEN_RE = re.compile(
+    r"(?P<main>[^,]+?)\s+between\s+(?P<cross1>[^,]+?)\s+(?:and|&)\s+(?P<cross2>[^,]+)",
+    re.IGNORECASE,
+)
 
 def _regex_place_fallback(query: str) -> List[str]:
     """

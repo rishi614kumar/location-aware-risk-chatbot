@@ -1,6 +1,7 @@
 # adapters/surrounding.py
 from __future__ import annotations
 from typing import List, Literal, Optional, Union
+from functools import lru_cache
 
 import geopandas as gpd
 import numpy as np
@@ -62,9 +63,9 @@ def get_surrounding_bbls_from_bbl(
     -------
     List[str] : sorted unique BBLs
     """
-    # Load data
-    pluto = load_pluto_geom()          # ['BBL','geometry'] in EPSG:2263
-    lion = load_lion_geom()            # ['_street_name','_width_ft','geometry'] in EPSG:2263
+    # Load data once (cached)
+    pluto = _cached_pluto_geom()          # ['BBL','geometry'] in EPSG:2263
+    lion = _cached_lion_geom()            # ['_street_name','_width_ft','geometry'] in EPSG:2263
 
 
     # Grab target lot
@@ -148,6 +149,19 @@ def get_surrounding_bbls_from_bbl(
         bbls = sorted(bbls)
 
     return bbls
+
+
+
+@lru_cache(maxsize=1)
+def _cached_pluto_geom() -> gpd.GeoDataFrame:
+    """Load PLUTO geometry once and reuse across calls."""
+    return load_pluto_geom()
+
+
+@lru_cache(maxsize=1)
+def _cached_lion_geom() -> gpd.GeoDataFrame:
+    """Load LION geometry once and reuse across calls."""
+    return load_lion_geom()
 
 
 
