@@ -32,6 +32,14 @@ GenAI-powered chatbot for site-based project risk insights in NYC.
 
    Replace the placeholders (e.g., `<your_geoclient_api_key>`) with the actual values for your environment.
 
+   You can generate a secure value for `CHAINLIT_AUTH_SECRET` with:
+
+   ```bash
+   chainlit create-secret
+   ```
+
+   Copy the generated secret into your `.env` file.
+
 ### Installation
 1. Clone the repository:
    ```bash

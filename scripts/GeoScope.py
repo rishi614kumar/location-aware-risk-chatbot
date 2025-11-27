@@ -3,17 +3,129 @@ GeoScope stub: returns a filter dict for each dataset.
 Replace logic here to generate spatial filters based on addresses and handler.datasets.
 """
 from __future__ import annotations
-from typing import Dict, Any, List, Optional
-from itertools import combinations
+import atexit
+import os
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional, Tuple
 from api.GeoClient import get_bbl_from_address, get_bbl_from_intersection
-from adapters.surrounding import get_surrounding_bbls_from_bbl
+from dataclasses import dataclass, field
 from adapters.surrounding import get_surrounding_bbls_from_bbl
 from adapters.coords import get_lonlat_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
-from adapters.street_span import get_lion_span_from_bbl, get_segment_id_from_bbl
-from config.settings import DATASET_CONFIG, BORO_CODE_MAP
+from adapters.street_span import get_lion_span_from_bbl, get_bbls_between_intersections, get_segment_id_from_bbl
+from adapters.schemas import GeoBundle
+from scripts.GeoBundle import geo_from_bbl
+from config.settings import DATASET_CONFIG,BORO_CODE_MAP
 from config.logger import logger
+
+try:
+    _GEO_MAX_WORKERS = max(1, int(os.getenv("GEO_MAX_WORKERS", "4")))
+except ValueError:
+    _GEO_MAX_WORKERS = 4
+_GEO_EXECUTOR = ThreadPoolExecutor(max_workers=_GEO_MAX_WORKERS)
+
+
+def _shutdown_geo_executor() -> None:
+    try:
+        _GEO_EXECUTOR.shutdown(wait=False)
+    except Exception:
+        pass
+
+
+atexit.register(_shutdown_geo_executor)
+
+
+@dataclass(frozen=True)
+class GeoResolution:
+    """Resolved BBLs alongside their enriched GeoBundle payloads."""
+
+    bundles: List[GeoBundle]
+    bbls: List[str]
+    resolved_records: List[Tuple[Dict[str, Any], Optional[str]]] = field(default_factory=list)
+
+
+def _dedupe_preserve_order(values: List[Optional[str]]) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def _format_lonlat(lon: float, lat: float) -> str:
+    return f"{lon:.6f},{lat:.6f}"
+
+
+_SPAN_NOTES_RE = re.compile(
+    r"(?P<main>[^,]+?)\s+between\s+(?P<cross1>[^,]+?)\s+(?:and|&)\s+(?P<cross2>[^,]+)",
+    re.IGNORECASE,
+)
+
+
+def _normalize_span_token(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).lower()
+
+
+def _sorted_cross(c1: str, c2: str) -> Tuple[str, str]:
+    one = _normalize_span_token(c1)
+    two = _normalize_span_token(c2)
+    return tuple(sorted((one, two)))
+
+
+def _extract_span_metadata(record: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    for field in (record.get("notes"), record.get("raw")):
+        if not field:
+            continue
+        match = _SPAN_NOTES_RE.search(str(field))
+        if not match:
+            continue
+        main = match.group("main").strip()
+        cross1 = match.group("cross1").strip()
+        cross2 = match.group("cross2").strip()
+        if main and cross1 and cross2:
+            return {
+                "main": main,
+                "cross1": cross1,
+                "cross2": cross2,
+                "borough": (record.get("borough") or "").strip(),
+            }
+    return None
+
+
+def _group_span_endpoints(resolution: GeoResolution) -> List[Tuple[Dict[str, str], List[str]]]:
+    """Group resolved address records that describe the same street span."""
+
+    grouped: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+
+    for record, bbl in resolution.resolved_records or []:
+        if not record:
+            continue
+        metadata = _extract_span_metadata(record)
+        if not metadata:
+            continue
+        key = (
+            _normalize_span_token(metadata["main"]),
+            *_sorted_cross(metadata["cross1"], metadata["cross2"]),
+            _normalize_span_token(metadata.get("borough", "")),
+        )
+        entry = grouped.setdefault(key, {"meta": metadata, "bbls": []})
+        if bbl:
+            entry["bbls"].append(str(bbl))
+
+    span_groups: List[Tuple[Dict[str, str], List[str]]] = []
+    for entry in grouped.values():
+        bbls = _dedupe_preserve_order(entry.get("bbls", []))
+        if len(bbls) >= 2:
+            span_groups.append((entry["meta"], bbls))
+    return span_groups
+
 
 def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     house = (record.get("house_number") or "").strip()
@@ -21,7 +133,7 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     borough = (record.get("borough") or "").strip()
 
     if not street or not borough:
-        logger.warning(f"No proper address for {normalized} ({borough})")
+        logger.warning("Incomplete address data; cannot resolve BBL for record.")
         return None
 
     normalized = street.replace(" and ", " & ").replace(" AND ", " & ")
@@ -47,7 +159,46 @@ def _resolve_single_bbl(record: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
+def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoResolution:
+    """Resolve address dicts into GeoBundle objects plus ordered BBL list."""
+
+    bundles: List[GeoBundle] = []
+    ordered_bbls: List[str] = []
+    seen_bbls: set[str] = set()
+    resolved_records: List[Tuple[Dict[str, Any], Optional[str]]] = []
+
+    for record in addresses or []:
+        if not isinstance(record, dict):
+            logger.warning("Address record is not a dict; skipping span tracking.")
+            continue
+
+        record_copy = dict(record)
+        bbl = _resolve_single_bbl(record_copy)
+        resolved_records.append((record_copy, str(bbl) if bbl else None))
+        if not bbl:
+            continue
+        bbl_str = str(bbl)
+        if bbl_str in seen_bbls:
+            continue
+        seen_bbls.add(bbl_str)
+
+        try:
+            bundle = geo_from_bbl(bbl_str)
+            if not isinstance(bundle, GeoBundle):
+                raise TypeError("geo_from_bbl did not return GeoBundle")
+            if not bundle.bbl:
+                bundle = bundle.copy(update={"bbl": bbl_str})
+            bundles.append(bundle)
+            ordered_bbls.append(bundle.bbl)
+        except Exception as exc:
+            logger.warning(f"Geo bundle lookup failed for BBL {bbl_str}: {exc}")
+            ordered_bbls.append(bbl_str)
+
+    ordered_bbls = _dedupe_preserve_order(ordered_bbls)
+    return GeoResolution(bundles=bundles, bbls=ordered_bbls, resolved_records=resolved_records)
+
+
+def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: Optional[Dict[str, GeoBundle]] = None) -> List[str]:
     """
     Given a list of nearby BBLs, convert all to the specified geo_unit and
     deduplicate results.
@@ -55,19 +206,34 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
     units = set()
 
     for b in bbl_list:
+        bundle = bundle_lookup.get(b) if bundle_lookup else None
         try:
             if geo_unit == "PRECINCT":
-                val = get_precinct_from_bbl(b)
+                if bundle and bundle.precinct:
+                    val = str(bundle.precinct)
+                else:
+                    val = get_precinct_from_bbl(b)
+                    val = str(val) if val is not None else None
             elif geo_unit.startswith("NTA"):
-                val = get_nta_from_bbl(b)
+                if bundle and bundle.nta:
+                    val = str(bundle.nta)
+                else:
+                    val = get_nta_from_bbl(b)
             elif geo_unit == "STREETSPAN":
                 vals = get_segment_id_from_bbl(b)
                 if vals:
                     units.update(vals)
                 continue
             elif geo_unit in ("LONLAT", "COORD"):
-                lon, lat = get_lonlat_from_bbl(b)
-                val = f"{lon},{lat}"
+                if bundle and bundle.longitude is not None and bundle.latitude is not None:
+                    val = _format_lonlat(float(bundle.longitude), float(bundle.latitude))
+                else:
+                    coords = get_lonlat_from_bbl(b)
+                    if coords is not None:
+                        lon, lat = coords
+                        val = _format_lonlat(lon, lat)
+                    else:
+                        val = None
             elif geo_unit == "BBL":
                 val = b
             else:
@@ -85,13 +251,9 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str) -> List[str]:
 
 def resolve_bbls_from_addresses(addresses: List[Dict[str, Any]]) -> List[str]:
     """Resolve BBLs from a list of address dicts. Deduplicated, order-preserving."""
-    resolved_bbls: List[str] = []
-    for record in addresses or []:
-        bbl = _resolve_single_bbl(record)
-        if bbl:
-            resolved_bbls.append(bbl)
-    # de-duplicate while preserving order
-    return list(dict.fromkeys(b for b in resolved_bbls if b))
+
+    resolution = resolve_geo_bundles_from_addresses(addresses)
+    return resolution.bbls
 
 
 def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = True) -> List[str]:
@@ -99,55 +261,122 @@ def aggregate_surrounding_bbls(resolved_bbls: List[str], surrounding: bool = Tru
     if not resolved_bbls:
         return []
     if not surrounding:
-        return list(dict.fromkeys(resolved_bbls))
+        return _dedupe_preserve_order(resolved_bbls)
 
     nearby_set = set()
-    for bbl in resolved_bbls:
+
+    futures = {
+        _GEO_EXECUTOR.submit(
+            get_surrounding_bbls_from_bbl,
+            bbl,
+            mode="street",
+            include_self=True,
+        ): bbl
+        for bbl in resolved_bbls
+    }
+
+    for future in as_completed(futures):
+        seed_bbl = futures[future]
         try:
-            results = get_surrounding_bbls_from_bbl(
-                bbl=bbl,
-                mode="street",
-                include_self=True,
-            )
-            for item in results:
-                nearby_set.add(item)
+            results = future.result()
         except Exception as exc:
-            logger.warning(f"Surrounding lookup failed for {bbl}: {exc}")
-            nearby_set.add(bbl)
+            logger.warning(f"Surrounding lookup failed for {seed_bbl}: {exc}")
+            results = [seed_bbl]
+
+        for item in results:
+            nearby_set.add(item)
     nearby_bbls = sorted(nearby_set)
     logger.info(f"Aggregated {len(nearby_bbls)} unique BBLs from {len(resolved_bbls)} addresses")
     return nearby_bbls
 
 
-def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str], borough_type: str, borough_form: int,col_name: Dict, col_digit: Dict) -> Optional[str]:
+def resolve_bbls_from_street_spans(resolution: GeoResolution) -> List[str]:
+    """Resolve BBLs that fall along a user-specified street span (between two intersections)."""
+
+    span_groups = _group_span_endpoints(resolution)
+    if not span_groups:
+        return []
+
+    span_bbls: List[str] = []
+
+    for meta, endpoints in span_groups:
+        if len(endpoints) < 2:
+            continue
+        start_bbl, end_bbl = endpoints[0], endpoints[-1]
+        try:
+            span_result = get_bbls_between_intersections(
+                start_bbl,
+                end_bbl,
+                street_name=meta.get("main"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Street span lookup failed for %s between %s and %s: %s",
+                meta.get("main"),
+                meta.get("cross1"),
+                meta.get("cross2"),
+                exc,
+            )
+            span_result = []
+
+        if span_result:
+            logger.info(
+                "Street span '%s' between %s and %s resolved to %d BBLs",
+                meta.get("main"),
+                meta.get("cross1"),
+                meta.get("cross2"),
+                len(span_result),
+            )
+            span_bbls.extend(span_result)
+        else:
+            # Fall back to the endpoints if the span could not be built
+            span_bbls.extend([start_bbl, end_bbl])
+
+    return _dedupe_preserve_order(span_bbls)
+
+
+def _build_where_for_geo_unit(
+    geo_unit: str,
+    bbls_to_use: List[str],
+    *,
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+    borough_type: str = "",
+    borough_form: int = 0,
+    col_name: Optional[Dict[str, str]] = None,
+    col_digit: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
     """Build a Socrata where clause for a specific geo unit given a list of BBLs to use."""
     geo_unit = (geo_unit or "BBL").upper()
     if not bbls_to_use:
         return None
+
+    col_name = col_name or {}
+    col_digit = col_digit or {}
 
     if geo_unit == "BBL":
         vals = ",".join(f"'{b}'" for b in bbls_to_use)
         return f"BBL IN ({vals})"
 
     if geo_unit == "PRECINCT":
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{p}'" for p in ids)
-        return f"PCT in [{vals}]" if vals else None
+        pct_col = col_name.get("precinct", "Precinct")
+        return f"{pct_col} IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{n}'" for n in ids)
-        return f"nta2020 IN ({vals})" if vals else None
+        return f"nta_code IN ({vals})" if vals else None
 
     if geo_unit == "STREETSPAN":
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{s}'" for s in ids)
         return f"segmentid IN ({vals})" if vals else None
 
     if geo_unit in ("LONLAT", "COORD"):
-        ids = get_surrounding_units(bbls_to_use, geo_unit)
-        coords = [tuple(map(float, lonlat.split(','))) for lonlat in ids]
-        geometry_col = col_name.get("geometry", None)
+        ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
+        coords = [lonlat.split(',') for lonlat in ids if "," in lonlat]
+        geometry_col = col_name.get("geometry", "") or "geometry"
         conds = " OR ".join([
             f"within_circle({geometry_col},{lat}, {lon}, 100)"
             for lon, lat in coords
@@ -210,62 +439,138 @@ def _build_where_for_geo_unit(geo_unit: str, bbls_to_use: List[str], borough_typ
     return None
 
 
-def build_dataset_filters_for_handler(handler, resolved_bbls: List[str], nearby_bbls: List[str]) -> Dict[str, Dict[str, Any]]:
+def _build_filter_for_dataset(
+    ds,
+    resolved_bbls: List[str],
+    nearby_bbls: List[str],
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+    *,
+    force_nearby: bool = False,
+):
+    ds_name = ds.name
+    ds_conf = DATASET_CONFIG.get(ds_name, {})
+    geo_unit = ds_conf.get("geo_unit", "BBL").upper()
+    borough_type = ds_conf.get("Borough", "")
+    borough_form = ds_conf.get("Borough_form", 0) 
+    col_name = ds_conf.get("col_names", {}) 
+    col_digit = ds_conf.get("cols", {})
+    mode = ds_conf.get("mode", "street")
+    want_surrounding = ds_conf.get("surrounding", False)
+
+    try:
+        use_nearby = want_surrounding or force_nearby
+        bbls_to_use = nearby_bbls if use_nearby else (resolved_bbls[:1] if resolved_bbls else [])
+        where_str = _build_where_for_geo_unit(
+            geo_unit,
+            bbls_to_use,
+            bundle_lookup=bundle_lookup,
+            borough_type=borough_type,
+            borough_form=borough_form,
+            col_name=col_name,
+            col_digit=col_digit,
+        )
+        if where_str:
+            filter_def = {"where": where_str, "limit": 1000}
+            logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
+        else:
+            filter_def = {"limit": 200}
+            logger.warning(f"No valid filter for {ds_name}; using preview mode.")
+    except NotImplementedError:
+        logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
+        filter_def = {"limit": 0}
+    except Exception as exc:
+        logger.error(f"Unexpected error on {ds_name}: {exc}")
+        filter_def = {"limit": 100}
+
+    return ds_name, filter_def
+
+
+def build_dataset_filters_for_handler(
+    handler,
+    resolved_bbls: List[str],
+    nearby_bbls: List[str],
+    bundle_lookup: Optional[Dict[str, GeoBundle]] = None,
+    *,
+    force_nearby: bool = False,
+) -> Dict[str, Dict[str, Any]]:
     """Build the filter dict per dataset in handler using resolved and nearby BBLs per DATASET_CONFIG."""
     filters: Dict[str, Dict[str, Any]] = {}
+    future_map = {
+        ds.name: _GEO_EXECUTOR.submit(
+            _build_filter_for_dataset,
+            ds,
+            resolved_bbls,
+            nearby_bbls,
+            bundle_lookup,
+            force_nearby=force_nearby,
+        )
+        for ds in handler
+    }
+
     for ds in handler:
-        ds_name = ds.name
-        ds_conf = DATASET_CONFIG.get(ds_name, {})
-        geo_unit = ds_conf.get("geo_unit", "BBL").upper()
-        borough_type = ds_conf.get("Borough", "")
-        borough_form = ds_conf.get("Borough_form", 0) 
-        col_name = ds_conf.get("col_names", {}) 
-        col_digit = ds_conf.get("cols", {})
-        mode = ds_conf.get("mode", "street")
-        want_surrounding = ds_conf.get("surrounding", False)
+        future = future_map.get(ds.name)
+        if future is None:
+            continue
         try:
-            bbls_to_use = nearby_bbls if want_surrounding else (resolved_bbls[:1] if resolved_bbls else [])
-            where_str = _build_where_for_geo_unit(geo_unit, bbls_to_use, borough_type, borough_form,col_name,col_digit)
-            if where_str:
-                filters[ds_name] = {"where": where_str, "limit": 1000}
-                logger.info(f"Applied filter on {ds_name} [{geo_unit}] ({mode}): {where_str}")
-            else:
-                filters[ds_name] = {"limit": 200}
-                logger.warning(f"No valid filter for {ds_name}; using preview mode.")
-        except NotImplementedError:
-            logger.warning(f"Skipping dataset '{ds_name}' — API not implemented.")
-            filters[ds_name] = {"limit": 0}
-        except Exception as e:
-            logger.error(f"Unexpected error on {ds_name}: {e}")
-            filters[ds_name] = {"limit": 100}
+            ds_name, filter_def = future.result()
+        except Exception as exc:
+            ds_name = ds.name
+            logger.error(f"Dataset filter task failed for {ds_name}: {exc}")
+            filter_def = {"limit": 100}
+        filters[ds_name] = filter_def
     return filters
 
-def get_dataset_filters(addresses: List[Dict[str, Any]], handler, surrounding=True) -> Dict[str, Dict[str, Any]]:
-    """Orchestrator that delegates to modular helpers for clarity and testability."""
+def get_dataset_filters(
+    addresses: List[Dict[str, Any]],
+    handler,
+    surrounding: bool = True,
+) -> Tuple[Dict[str, Dict[str, Any]], List[GeoBundle]]:
+    """Return dataset filters along with the resolved GeoBundles for downstream reuse."""
+
     filters: Dict[str, Dict[str, Any]] = {}
 
     if not addresses:
         logger.warning("No address provided — using default preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
-        return filters
+        return filters, []
 
-    # Step 1: Resolve addresses to BBLs
-    resolved_bbls = resolve_bbls_from_addresses(addresses)
+    # Step 1: Resolve addresses to GeoBundles/BBLs
+    resolution = resolve_geo_bundles_from_addresses(addresses)
+    resolved_bbls = resolution.bbls
+
+    span_bbls = resolve_bbls_from_street_spans(resolution)
+    if span_bbls:
+        logger.info("Street span detected; %d BBLs will anchor filtering", len(span_bbls))
 
     if not resolved_bbls:
         logger.warning("No BBLs resolved from provided addresses; using preview mode.")
         for ds in handler:
             filters[ds.name] = {"limit": 200}
-        return filters
+        return filters, resolution.bundles
+
+    bundle_lookup = {bundle.bbl: bundle for bundle in resolution.bundles if bundle.bbl}
 
     # Step 2: Aggregate surrounding BBLs (optional)
-    nearby_bbls = aggregate_surrounding_bbls(resolved_bbls, surrounding=surrounding)
+    if span_bbls:
+        nearby_bbls = span_bbls
+    else:
+        nearby_bbls = aggregate_surrounding_bbls(resolved_bbls, surrounding=surrounding)
 
     # Step 3: Build dataset filters
-    filters = build_dataset_filters_for_handler(handler, resolved_bbls, nearby_bbls)
+    filters = build_dataset_filters_for_handler(
+        handler,
+        resolved_bbls,
+        nearby_bbls,
+        bundle_lookup=bundle_lookup,
+        force_nearby=bool(span_bbls),
+    )
 
-    # Log the final filters dict for debugging
-    logger.info(f"Final dataset filters returned: {filters}")
+    logger.info(
+        "Final dataset filters returned for %d datasets using %d resolved BBLs (bundles=%d)",
+        len(filters),
+        len(resolved_bbls),
+        len(resolution.bundles),
+    )
 
-    return filters
+    return filters, resolution.bundles

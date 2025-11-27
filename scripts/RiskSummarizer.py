@@ -1,5 +1,5 @@
 # scripts/RiskSummarizer.py
-from llm.LLMInterface import Chat, make_backend
+from llm.LLMInterface import Chat, make_backend, BlockedPromptException
 from config.logger import logger
 from config.settings import DATASET_CONFIG
 
@@ -77,15 +77,94 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
     prompt += (f"""
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
-    if llm_chat:
-        response = llm_chat.ask(prompt)
-        logger.info(f"Response from risk summarization: {response}")
-        return response
-    else:
-        chat = Chat(make_backend(provider="gemini"))
-        chat.start()
-        response = chat.ask(prompt)
-        chat.reset()
-        logger.info(f"Response from risk summarization: {response}")
-    return response
+    
+    # Try to get LLM response with error handling
+    try:
+        if llm_chat:
+            response = llm_chat.ask(prompt)
+            logger.info(f"Response from risk summarization: {response}")
+            return response
+        else:
+            chat = Chat(make_backend(provider="gemini"))
+            chat.start()
+            response = chat.ask(prompt)
+            chat.reset()
+            logger.info(f"Response from risk summarization: {response}")
+            return response
+    except BlockedPromptException as e:
+        # Handle content blocking - provide a fallback summary
+        logger.warning(f"Content blocked by safety filters: {e}. Generating fallback summary.")
+        return _generate_fallback_summary(user_text, parsed_result, data_handler)
+    except Exception as e:
+        # Handle other API errors
+        logger.error(f"Error calling LLM API: {e}. Generating fallback summary.")
+        return _generate_fallback_summary(user_text, parsed_result, data_handler)
+
+
+def _generate_fallback_summary(user_text: str, parsed_result: dict, data_handler=None, max_rows_per_dataset: int = 20) -> str:
+    """
+    Generate a fallback summary when LLM API fails or content is blocked.
+    Provides a structured summary based on available data without LLM processing.
+    
+    Args:
+        user_text: The original user question
+        parsed_result: Parsed result dictionary
+        data_handler: DataHandler instance with datasets
+        max_rows_per_dataset: Maximum number of rows to show per dataset (default: 20)
+    """
+    cats = parsed_result.get('categories', [])
+    addresses = parsed_result.get('address', [])
+    datasets = parsed_result.get('dataset_names', [])
+    
+    summary_parts = [
+        f"I apologize, but I encountered an issue processing your request with the AI model.",
+        f"However, I can provide you with the following information based on your query:",
+        "",
+        f"**Your Question:** {user_text}",
+        "",
+        f"**Relevant Categories:** {', '.join(cats) if cats else 'N/A'}",
+        f"**Address(es):** {', '.join(a.get('raw', '') for a in addresses) if addresses else 'N/A'}",
+        f"**Datasets Analyzed:** {', '.join(datasets) if datasets else 'N/A'}",
+    ]
+    
+    if data_handler:
+        summary_parts.append("")
+        summary_parts.append("**Retrieved Data:**")
+        for ds in data_handler:
+            row_count = len(ds.df) if hasattr(ds, 'df') else 0
+            summary_parts.append("")
+            summary_parts.append(f"### {ds.name}")
+            if hasattr(ds, 'description') and ds.description:
+                summary_parts.append(f"*{ds.description}*")
+            
+            if row_count > 0:
+                summary_parts.append(f"**Total records found:** {row_count}")
+                
+                # Show actual data (limited to max_rows_per_dataset)
+                try:
+                    df_to_show = ds.df.head(max_rows_per_dataset)
+                    if hasattr(df_to_show, 'to_markdown'):
+                        summary_parts.append("")
+                        summary_parts.append("**Data (showing first {} rows):**".format(min(row_count, max_rows_per_dataset)))
+                        summary_parts.append("")
+                        summary_parts.append(df_to_show.to_markdown(index=False))
+                        if row_count > max_rows_per_dataset:
+                            summary_parts.append(f"\n*... and {row_count - max_rows_per_dataset} more row(s) not shown*")
+                    else:
+                        # Fallback if to_markdown is not available
+                        summary_parts.append("")
+                        summary_parts.append("**Data (showing first {} rows):**".format(min(row_count, max_rows_per_dataset)))
+                        summary_parts.append("")
+                        summary_parts.append(str(df_to_show))
+                except Exception as e:
+                    logger.warning(f"Error formatting data for {ds.name}: {e}")
+                    summary_parts.append(f"*Error displaying data: {e}*")
+            else:
+                summary_parts.append("**No records found** for the specified location(s)")
+    
+    summary_parts.append("")
+    summary_parts.append("---")
+    summary_parts.append("**Note:** Due to content filtering restrictions or API errors, I was unable to generate a detailed AI-powered analysis. Please review the data above for specific information about your query.")
+    
+    return "\n".join(summary_parts)
 

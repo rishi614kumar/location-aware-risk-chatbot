@@ -38,10 +38,6 @@ DATASET_DESCRIPTIONS = {
         "Contains zoning and land use classifications for each tax lot, "
         "used to determine regulatory and development constraints."
     ),
-    "NYC OpenData PLUTO": (
-        "Provides detailed building and land use data, including lot area, ownership, "
-        "construction year, and zoning attributes at the BBL level."
-    ),
     "NYC OpenData Automated Traffic Volume Counts": (
         "Records traffic volume at bridges and major roads, supporting transportation "
         "and congestion analysis for various locations across the city."
@@ -66,18 +62,14 @@ DATASET_DESCRIPTIONS = {
         "Defines the boundaries of designated historic districts throughout NYC, "
         "as established by the Landmarks Preservation Commission."
     ),
-    "LION": (
-        "A single-line street base map representing the city’s streets and other linear geographic "
-        "features. Includes address ranges, borough codes, and right-of-way widths."
-    ),
     "Zoning GIS data": (
         "Includes zoning districts, special purpose districts, subdistricts, limited height districts, "
         "commercial overlays, and zoning map amendments for citywide land use analysis."
     ),
-    "Population by Community Districts": (
-        "Aggregated population counts by community district for decennial census years "
-        "1970 through 2010, used for demographic and spatial trend analysis."
-    ),
+   # "Population by Community Districts": (
+   #     "Aggregated population counts by community district for decennial census years "
+    #    "1970 through 2010, used for demographic and spatial trend analysis."
+   # ),
     "Population by Neighborhood Tabulation Area": (
         "Aggregations of census tracts grouped into Neighborhood Tabulation Areas (NTAs), "
         "providing demographic information and population change from 2000 to 2010."
@@ -129,9 +121,7 @@ DATASET_DESCRIPTIONS = {
         "and infrastructure analysis."
     ),
     "Street Pavement Rating": (
-        "The Citywide Catch Basins dataset maps over 150,000 catch basins that collect stormwater "
-        "and direct it into NYC’s sewer network or nearby waterbodies, supporting drainage "
-        "and flood management."
+        "The Agency performs ongoing assessment of New York City streets. Ratings are based on a scale from 1 to 10."
     ),
 }
 
@@ -147,20 +137,26 @@ DEFAULT_DATASET_FLAGS = dict(
     supports_addresses=True,
 )
 
+# Default domain to call SOCRATA
+DEFAULT_SOCRATA_DOMAIN = "data.cityofnewyork.us"
+
+# Alternative domain
+SOCRATA_DOMAIN_OVERRIDES = {
+    "MTA subway and other underground train lines": "data.ny.gov",
+}
+
 # Socrata dataset identifiers (4-4 codes) when available.
 DATASET_API_IDS = {
     "NYC OpenData Zoning and Tax Lot Database" : "fdkv-4t4z",
-    "NYC OpenData PLUTO" : "64uk-42ks",
     "NYC OpenData Automated Traffic Volume Counts" : "7ym2-wayt",
     "NYC OpenData Motor Vehicle Collisions" : "h9gi-nx95",
     "DOB permits" : "ipu4-2q9a",
     "Asbestos Control Program" : "vq35-j9qm",
     "Digital City Map Shapefile" : "y23c-72fa",
     "Historic Districts map" : "skyk-mpzq",
-    "LION" : None,
     "Zoning GIS data" : None,
-    "Population by Community Districts" : "xi7c-iiu2",
-    "Population by Neighborhood Tabulation Area" : "9nt8-h7nd",
+    # "Population by Community Districts" : "xi7c-iiu2",
+    "Population by Neighborhood Tabulation Area" : "swpk-hqdp",
     "Crime" : None,
     "Street Construction Permits" : "tqtj-sjs8",
     "MTA subway and other underground train lines" : "39hk-dx4f",
@@ -177,18 +173,101 @@ DATASET_API_IDS = {
 
 # Fewshots for training LLM to handle category of queries
 FEWSHOTS_MULTI = [
-    ("Where are the top traffic accident hotspots within 500 feet of 163rd Street?",
-     {"categories": ["Transportation & Traffic"], "datasets": ["NYC OpenData Motor Vehicle Collisions", "NYC OpenData Automated Traffic Volume Counts"], "confidence": 0.85, "borough": "Bronx"}),
-    ("Any active DOB permits near 10 Jay St?",
-     {"categories": ["Construction & Permitting"], "datasets": ["DOB permits", "Street Construction Permits"], "confidence": 0.85, "borough": "Brooklyn"}),
-    ("Is this parcel in a historic district and what’s the zoning?",
-     {"categories": ["Zoning & Land Use"], "datasets": ["Historic Districts map", "NYC OpenData Zoning and Tax Lot Database"], "confidence": 0.80, "borough": "Manhattan"}),
-    ("Any flood or sewer risk around 123 Main St?",
-     {"categories": ["Environmental & Health Risks"], "datasets": ["Sewer System Data", "Clean Air Tracking System (CATS)"], "confidence": 0.80, "borough": "Queens"}),
-    ("Where are the nearest fire hydrants near Borough Hall?",
-     {"categories": ["Public Safety & Social Context"], "datasets": ["Citywide Hydrants", "NYC OpenData Motor Vehicle Collisions"], "confidence": 0.75, "borough": "Brooklyn"}),
-    ("Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
-     {"categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"], "datasets": ["NYC OpenData Zoning and Tax Lot Database", "Sewer System Data", "NYC OpenData PLUTO"], "confidence": 0.88, "borough": "Manhattan"}),
+    # --- Transportation & Traffic ---
+    (
+        "Where are the top traffic accident hotspots within 500 feet of 163rd Street?",
+        {
+            "categories": ["Transportation & Traffic"],
+            "datasets": [
+                "NYC OpenData Motor Vehicle Collisions",
+                "NYC OpenData Automated Traffic Volume Counts"
+            ],
+            "confidence": 0.90,
+            "borough": "Bronx",
+        }
+    ),
+
+    # --- Construction & Permitting ---
+    (
+        "Any active DOB permits near 10 Jay St?",
+        {
+            "categories": ["Construction & Permitting"],
+            "datasets": [
+                "DOB permits"
+            ],
+            "confidence": 0.90,
+            "borough": "Brooklyn",
+        }
+    ),
+
+    # --- Zoning & Land Use ---
+    (
+        "Is West 4th St & Washington Square East in a historic district and any zoning information?",
+        {
+            "categories": ["Zoning & Land Use"],
+            "datasets": [
+                "Historic Districts map",
+                "NYC OpenData Zoning and Tax Lot Database"
+            ],
+            "confidence": 0.90,
+            "borough": "Manhattan",
+        }
+    ),
+
+    # --- Environmental & Health Risks ---
+    (
+        "Any flood or sewer risk around 123 Main St?",
+        {
+            "categories": ["Environmental & Health Risks"],
+            "datasets": [
+                "Sewer System Data",
+                "Citywide Catch Basins"
+            ],
+            "confidence": 0.82,
+            "borough": "Queens",
+        }
+    ),
+
+    # --- Public Safety & Social Context ---
+    (
+        "Where are the nearest fire hydrants near Borough Hall?",
+        {
+            "categories": ["Public Safety & Social Context"],
+            "datasets": [
+                "Citywide Hydrants"
+            ],
+            "confidence": 0.78,
+            "borough": "Brooklyn",
+        }
+    ),
+
+    # --- Comparative: Zoning + Environmental ---
+    (
+        "Compare zoning and environmental risks for 149th Street & Grand Concourse versus 181st Street & St. Nicholas Avenue.",
+        {
+            "categories": ["Comparative Site Queries", "Zoning & Land Use", "Environmental & Health Risks"],
+            "datasets": [
+                "NYC OpenData Zoning and Tax Lot Database",
+                "Sewer System Data"
+            ],
+            "confidence": 0.90,
+            "borough": "Manhattan",
+        }
+    ),
+
+    # --- Comparative: Population + Crime ---
+    (
+        "What is the population and crime statistics near Financial District compared to Hell's Kitchen?",
+        {
+            "categories": ["Comparative Site Queries", "Public Safety & Social Context"],
+            "datasets": [
+                "Population by Neighborhood Tabulation Area",
+                "Crime"
+            ],
+            "confidence": 0.86,
+            "borough": "Manhattan",
+        }
+    )
 ]
 
 # Fewshots for LLM to handle addresses and intersections
@@ -199,6 +278,16 @@ FEWSHOTS_ADDR = [
      {"addresses": [
          {"house_number": "", "street_name": "149th Street & Grand Concourse", "borough": "Bronx", "raw": "149th Street & Grand Concourse", "notes": ""},
          {"house_number": "", "street_name": "181st Street & St. Nicholas Avenue", "borough": "Manhattan", "raw": "181st Street & St. Nicholas Avenue", "notes": ""}
+     ]}),
+    ("Show the latest traffic counts for East 34th Street between 5th Avenue and Madison Avenue.",
+     {"addresses": [
+         {"house_number": "", "street_name": "East 34th Street & 5th Avenue", "borough": "Manhattan", "raw": "East 34th Street between 5th Avenue and Madison Avenue", "notes": "Segment: East 34th Street between 5th Ave and Madison Ave"},
+         {"house_number": "", "street_name": "East 34th Street & Madison Avenue", "borough": "Manhattan", "raw": "East 34th Street between 5th Avenue and Madison Avenue", "notes": "Segment: East 34th Street between 5th Ave and Madison Ave"}
+     ]}),
+    ("Compare traffic volumes between 240 E 38th St and 237 Park Ave.",
+     {"addresses": [
+         {"house_number": "240", "street_name": "East 38th St", "borough": "", "raw": "240 E 38th St", "notes": ""},
+         {"house_number": "237", "street_name": "Park Ave", "borough": "Manhattan", "raw": "237 Park Ave", "notes": ""}
      ]}),
      ("Which location has fewer open permits: Jamaica Avenue in Queens or Broadway in Upper Manhattan?",
       {"addresses": [
@@ -236,6 +325,10 @@ FEWSHOTS_ADDR = [
      ("List motor vehicle accidents near The American Museum of Natural History.",
      {"addresses": [
          {"house_number": "200", "street_name": "Central Park West", "borough": "Manhattan", "raw": "The American Museum of Natural History", "notes": "The American Museum of Natural History"}
+     ]}),
+    ("Is 120th Street and 5th Avenue in Astoria, an MS4 zone, or location of nearby catch basins?",
+     {"addresses": [
+         {"house_number": "", "street_name": "120th Street & 5th Avenue", "borough": "Manhattan", "raw": "120th Street and 5th Avenue in Astoria", "notes": "User specified 'in Astoria' for this intersection which is factually i...e intersection of 120th Street and 5th Avenue is in Manhattan."}
      ]})
 ]
 
@@ -252,7 +345,6 @@ cat_to_ds = {
         "City Owned and Leased Property",
         "NYC OpenData Zoning and Tax Lot Database",
         "Historic Districts map",
-        "LION data",
         "Zoning GIS data",
         "Digital City map shapefile",
         "Parks Monuments",
@@ -270,13 +362,13 @@ cat_to_ds = {
         "NYC OpenData Motor Vehicle Collisions",
         "Crime",
         "Street Construction Permits",
-        "MTA subway and other underground train lines",
+        "MTA subway and other underground train lines"
+        "Street Pavement Rating",
     ],
     "Public Safety & Social Context": [
-        "NYC OpenData PLUTO",
         "NYC OpenData Motor Vehicle Collisions",
         "NYC OpenData Automated Traffic Volume Counts",
-        "Population by Community Districts",
+        # "Population by Community Districts",
         "Population by Neighborhood Tabulation Area",
         "Crime",
         "Citywide Hydrants",
@@ -342,49 +434,81 @@ BORO_CODE_MAP = {
 
 
 # LLM Prompting for returning datasets
-SYS_MULTI = f"""Classify the user's question into one or more of these categories:
+SYS_MULTI = f"""
+Classify the user's question into one or more of the following categories:
 - Environmental & Health Risks
 - Zoning & Land Use
 - Construction & Permitting
 - Transportation & Traffic
 - Public Safety & Social Context
 - Comparative Site Queries
-Return STRICT JSON only:
-{{"categories": ["<labels>"], "datasets": ["<dataset names>"], "confidence": <0..1>}}
-Rules:
-- Traffic, collisions, congestion, road closures, counts, speeds, hotspots -> Transportation & Traffic
-- DOB permits, job filings, street construction, water/sewer permits -> Construction & Permitting
-- Zoning, land use, city-owned property, districts -> Zoning & Land Use
-- Flood/air/health exposure, sewer systems, population health -> Environmental & Health Risks
-- Crime, safety, hydrants, social context -> Public Safety & Social Context
-- Comparing between two sites (more/less, better/worse, higher/lower) -> include Comparative Site Queries plus other relevant labels
-- "datasets" should list the most relevant NYC datasets (typically 2-5) chosen from: {", ".join(ALL_DATASETS)}.
-- Prefer datasets whose categories overlap the predicted categories; only add others when clearly justified by the question.
-""".strip()
+
+Return STRICT JSON only in this format:
+{{
+  "categories": ["<labels>"],
+  "datasets": ["<dataset names>"],
+  "confidence": <0..1>
+}}
+
+Core rules:
+1. Select the **minimal number of datasets** required to directly answer the question.
+2. Only choose datasets whose categories clearly match the user's intent.
+3. Do NOT include datasets from other categories unless explicitly justified by the wording.
+4. Use only canonical dataset names from this list: {", ".join(ALL_DATASETS)}.
+5. Category routing:
+   - Traffic, crashes, congestion, counts, speeds, hotspots → Transportation & Traffic
+   - DOB permits, job filings, street construction, water/sewer permits → Construction & Permitting
+   - Zoning, land use, districts, city-owned property → Zoning & Land Use
+   - Flooding, sewer backups, environmental exposure, air/health risks → Environmental & Health Risks
+   - Population, crime, hydrants, social context → Public Safety & Social Context
+   - Comparisons between two locations (better/worse, higher/lower) → include Comparative Site Queries + relevant categories
+6. Population-only questions should use **population datasets**, not environmental or crime datasets.
+7. When multiple categories apply, return only the datasets from the selected categories that directly answer the question.
+"""
+
 
 # LLM Prompt for it to extract locations
-SYS_ADDR = """Extract all location mentions from the user's query.
-Return STRICT JSON only: {"addresses":[{"house_number":"","street_name":"","borough":"","raw":"","notes":""}, ...]}
+SYS_ADDR = """Extract all NYC location mentions from the user's query.
+
+Return STRICT JSON only:
+{"addresses":[{"house_number":"","street_name":"","borough":"","raw":"","notes":""}, ...]}
+
 Rules:
-- Include numbered street addresses (e.g., "10 Jay St", "123 Main Street")
+- Include numbered street addresses (e.g., "10 Jay St", "123 Main Street").
 - For intersections output a single object with "street_name" formatted "Street A & Street B"
+  and house_number="".
 - Include named places/POIs/landmarks/neighborhoods when used as locators, even without qualifiers
-  (e.g., "Times Square", "Union Square Park", "Columbia University", "Penn Station")
-- When a broad landmark is mentioned, output the best-known street address or intersection for that landmark.
-  Preserve the spoken landmark name in the "notes" field.
-- When a neighborhood or area (e.g., "East Harlem") is mentioned, output a representative street address or main intersection within that neighborhood.
-- When the query compares two locations ("X versus Y"), output a specific street address or cross street for each location mentioned so downstream systems can geocode them.
-  If historic data suggests a canonical address for the location, return that; otherwise pick a central block or intersection.
-- If the query says "near X", include X
-- Do NOT include cities/states/countries unless explicitly mentioned
-- Preserve original wording/casing in the "raw" field; trim whitespace elsewhere
-- Deduplicate while preserving order
+  (e.g., "Times Square", "Union Square Park", "Columbia University", "Penn Station").
+- If a broad landmark is mentioned, output its best-known NYC address or intersection.
+  Preserve the spoken landmark name in "notes".
+- If a neighborhood/area (e.g., "East Harlem") is mentioned, output a representative central
+  intersection or address only if needed for geocoding. Mark this as an approximation in "notes".
+- If the query compares two locations ("X versus Y"), output one specific address or intersection
+  for each side. If you must approximate, say so in "notes".
+- If the query describes a stretch like "Street A between Street B and Street C", emit two entries:
+  Street A & Street B and Street A & Street C. Keep the original wording in "notes"
+  (e.g., "Street A between Street B and Street C").
+- If the query says "near X", include X as a location.
+- Do NOT include cities/states/countries unless explicitly mentioned.
+- Preserve original wording/casing in "raw"; trim whitespace elsewhere.
+- Deduplicate while preserving order.
+
+Borough guidance:
+- borough must be one of: Queens, Manhattan, Bronx, Staten Island, Brooklyn.
+- Fill borough if explicitly stated OR unambiguously inferable from the location.
+- If the user provides a neighborhood/borough that conflicts with a well-known NYC street/intersection,
+  **correct the borough to the true one** and explain the correction briefly in notes.
+- If still ambiguous (street exists in multiple boroughs and no strong clue), leave borough=""
+  and note ambiguity in "notes". Do NOT guess in that case.
+
 Field guidance:
-- house_number: leading digits for numbered addresses; leave empty string if none
-- street_name: primary street/highway name or POI/intersection label (use intersections for landmarks when appropriate)
-- borough: Choose from Queens, Manhattan, Bronx, Staten Island, Brooklyn when determinable; otherwise empty
-- notes: optional clarifications (e.g., original landmark wording). Use empty string when not needed
+- house_number: leading digits for numbered addresses; "" if none.
+- street_name: primary street/highway name or POI/intersection label.
+- raw: exact substring from user query.
+- notes: clarifications like original landmark name or "approximate"/"ambiguous"/"conflict". Use "" if not needed.
 """.strip()
+
+
 
 def check_env():
     missing = [k for k, v in globals().items() if k.isupper() and v is None]
