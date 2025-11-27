@@ -14,7 +14,7 @@ from adapters.surrounding import get_surrounding_bbls_from_bbl
 from adapters.coords import get_lonlat_from_bbl
 from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
-from adapters.street_span import get_lion_span_from_bbl, get_bbls_between_intersections
+from adapters.street_span import get_lion_span_from_bbl, get_bbls_between_intersections, get_segment_id_from_bbl
 from adapters.schemas import GeoBundle
 from scripts.GeoBundle import geo_from_bbl
 from config.settings import DATASET_CONFIG,BORO_CODE_MAP
@@ -220,7 +220,7 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: 
                 else:
                     val = get_nta_from_bbl(b)
             elif geo_unit == "STREETSPAN":
-                vals = get_lion_span_from_bbl(b)
+                vals = get_segment_id_from_bbl(b)
                 if vals:
                     units.update(vals)
                 continue
@@ -371,7 +371,7 @@ def _build_where_for_geo_unit(
     if geo_unit == "STREETSPAN":
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{s}'" for s in ids)
-        return f"SegmentID IN ({vals})" if vals else None
+        return f"segmentid IN ({vals})" if vals else None
 
     if geo_unit in ("LONLAT", "COORD"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)

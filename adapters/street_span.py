@@ -8,7 +8,7 @@ from shapely.geometry import LineString, MultiLineString
 from shapely.ops import unary_union
 
 from data.pluto import load_pluto_geom
-from data.lion import load_lion_geom, load_lion_full
+from data.lion import load_lion_geom, load_lion14_geom, load_lion_full
 from config.settings import (
     MAX_BUFFER_FT, MIN_BUFFER_FT, DEFAULT_BUFFER_INCREMENT_FT, DEFAULT_BUFFER_FT)
 
@@ -300,3 +300,50 @@ def get_lion_span_from_bbl(
 
     street_names = sorted(joined["_street_name"].dropna().unique())
     return ", ".join(street_names)
+
+def get_segment_id_from_bbl(
+    bbl: str,
+    buffer_ft: Optional[Union[int, float]] = None
+) -> Optional[List[str]]:
+    """
+    Given a single BBL, return the street segment IDs it lies on.
+    Optionally allows a custom buffer distance (in feet).
+    If buffer_ft is None, uses StreetWidth_Max + DEFAULT_BUFFER_INCREMENT_FT ft as default.
+    """
+    lion = load_lion14_geom()
+    pluto = load_pluto_geom()
+
+    # Ensure BBL is compared as string
+    target = pluto[pluto["BBL"] == str(bbl)]
+    if target.empty:
+        print(f"No record found for BBL: {bbl}")
+        return None
+
+    # Ensure CRS matches between lion and pluto
+    if lion.crs.to_epsg() != pluto.crs.to_epsg():
+        lion = lion.to_crs(pluto.crs)
+
+    # Build street buffers
+    lion_buf = lion.copy()
+    if buffer_ft is None:
+        # Default buffer logic
+        lion_buf["buf_ft"] = np.where(
+            lion_buf["_width_ft"].isna(), DEFAULT_BUFFER_FT, lion_buf["_width_ft"] + DEFAULT_BUFFER_INCREMENT_FT
+        )
+        lion_buf["buf_ft"] = np.clip(lion_buf["buf_ft"], MIN_BUFFER_FT, MAX_BUFFER_FT)
+    else:
+        # Custom buffer
+        lion_buf["buf_ft"] = buffer_ft
+
+    lion_buf["geometry"] = lion_buf.buffer(lion_buf["buf_ft"], cap_style=2, join_style=2)
+
+    # Find which street(s) intersect the target BBL
+    joined = gpd.sjoin(target, lion_buf, how="inner", predicate="intersects")
+
+    if joined.empty:
+        print(f"No streets found intersecting BBL {bbl}")
+        return None
+
+    segment_ids = sorted(joined["SegmentID"].dropna().unique())
+    print(f"Found segment IDs for BBL {bbl}: {segment_ids}")
+    return segment_ids
