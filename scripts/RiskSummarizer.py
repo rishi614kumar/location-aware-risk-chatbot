@@ -77,6 +77,9 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
     prompt += (f"""
         Based on the extracted data, please provide a detailed and accurate response to the users question: \n{user_text} \n.
     """)
+    #print("--------------------------------")
+    #print("Prompt for risk summarization:")
+    #print(prompt)
     
     # Try to get LLM response with error handling
     try:

@@ -303,6 +303,8 @@ class DecideShowDataUnit(ConversationalUnit):
         user_text = context["user_text"]
         chat_history = context["chat_history"]
         result = context["parsed_result"]
+        #risk_decision = context.get("risk_decision")
+        #show_data_decision_prompt = get_show_data_decision_prompt(user_text, chat_history, result, risk_decision)
         show_data_decision_prompt = get_show_data_decision_prompt(user_text, chat_history, result)
         show_data_decision = (await asyncio.to_thread(self.llm_chat.ask, show_data_decision_prompt)).strip().lower()
         context["show_data_decision"] = show_data_decision
