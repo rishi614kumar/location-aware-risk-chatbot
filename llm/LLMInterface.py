@@ -1,6 +1,7 @@
 # llm_chat.py
 from __future__ import annotations
 import os
+import time
 from typing import List, Optional, Dict, Any, Protocol
 from dotenv import load_dotenv
 from config.logger import logger
@@ -121,6 +122,11 @@ class GeminiBackend(ChatBackend):
             except Exception as e:
                 logger.warning(f"Error sending message: {e}. Retrying...")
                 last_exception = e
+                # Add exponential backoff delay before retrying (except on last attempt)
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s, etc.
+                    logger.info(f"Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
                 continue
         
         # If we get here, we've exhausted retries

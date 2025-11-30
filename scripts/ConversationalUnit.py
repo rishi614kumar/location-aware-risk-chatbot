@@ -276,7 +276,8 @@ class DecideRiskSummaryUnit(ConversationalUnit):
         user_text = context["user_text"]
         chat_history = context["chat_history"]
         result = context["parsed_result"]
-        risk_decision_prompt = get_risk_summary_decision_prompt(user_text, chat_history, result)
+        show_data_decision = context.get("show_data_decision")
+        risk_decision_prompt = get_risk_summary_decision_prompt(user_text, chat_history, result, show_data_decision)
         risk_decision = (await asyncio.to_thread(self.llm_chat.ask, risk_decision_prompt)).strip().lower()
         context["risk_decision"] = risk_decision
         return context

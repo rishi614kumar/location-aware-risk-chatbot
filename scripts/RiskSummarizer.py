@@ -54,7 +54,7 @@ def summarize_risk(user_text, parsed_result, data_handler=None, llm_chat: Chat =
             # if not in DATASET_CONFIG, use default values (these are the defaults used in this case)
             ds_config = DATASET_CONFIG.get(ds.name, {}) 
             surrounding = ds_config.get("surrounding", False)
-            mode = ds_config.get("mode", "street")
+            mode = "street" #ds_config.get("mode", "street")
             geo_unit = ds_config.get("geo_unit", "BBL")
             
             # Determine scope description
