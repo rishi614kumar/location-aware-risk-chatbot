@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from llm.LLMInterface import Chat, make_backend
 from scripts.DataHandler import DataHandler
 from scripts.RiskSummarizer import summarize_risk
@@ -15,10 +16,10 @@ from prompts.app_prompts import (
 from llm.LLMParser import route_query_to_datasets_multi
 from config.logger import logger
 from scripts.ConversationalUnit import (
-    DecideModeUnit, DecideReuseAddressesUnit, DecideReuseDatasetsUnit, ParseQueryUnit, DataPreviewUnit, FilterDatasetsUnit,
-    DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit, ConversationalAnswerUnit,
-    ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit, BuildDatasetFiltersUnit,
-    SurroundingDecisionUnit
+    DecideModeUnit, DecideReuseAddressesUnit, DecideReuseDatasetsUnit, ParseQueryUnit, DecideIntersectionAnalysisUnit,
+    DataPreviewUnit, FilterDatasetsUnit, DecideRiskSummaryUnit, RiskSummaryUnit, DecideShowDataUnit, FollowupUnit,
+    ConversationalAnswerUnit, ParsedResultFormatUnit, ResolveBBLsUnit, AggregateSurroundingBBLsUnit,
+    BuildDatasetFiltersUnit, SurroundingDecisionUnit
 )
 
 class ConversationalAgent:
@@ -34,6 +35,7 @@ class ConversationalAgent:
             "decide_reuse_addresses": DecideReuseAddressesUnit(self.llm_chat),
             "decide_reuse_datasets": DecideReuseDatasetsUnit(self.llm_chat),
             "parse_query": ParseQueryUnit(),
+            "decide_intersection": DecideIntersectionAnalysisUnit(self.llm_chat),
             "parsed_result_format": ParsedResultFormatUnit(),
             "data_preview": DataPreviewUnit(self.llm_chat),
             "surrounding_decision": SurroundingDecisionUnit(self.llm_chat),
@@ -48,6 +50,18 @@ class ConversationalAgent:
             "conversational_answer": ConversationalAnswerUnit(self.llm_chat)
         }
 
+    @staticmethod
+    def _record_timing(context, unit_key: str, duration: float) -> None:
+        timings = context.setdefault("timings", {})
+        timings[f"{unit_key}_secs"] = duration
+
+    async def _run_unit(self, unit_key: str, context):
+        start = time.perf_counter()
+        try:
+            return await self.units[unit_key].run(context)
+        finally:
+            self._record_timing(context, unit_key, time.perf_counter() - start)
+
     async def stream(self, user_text):
         """Async generator yielding content chunks as soon as they are ready."""
         self.chat_history.append(user_text)
@@ -56,28 +70,29 @@ class ConversationalAgent:
             "user_text": user_text,
             "chat_history": history_str,
             "llm_chat": self.llm_chat,
-            "last_parsed_result": self.last_parsed_result
+            "last_parsed_result": self.last_parsed_result,
+            "timings": {},
         }
         # Decide mode
-        context = await self.units["decide_mode"].run(context)
+        context = await self._run_unit("decide_mode", context)
         mode = context["mode"]
         logger.info(f"Agent decision: {mode}")
 
         if mode == "conversational":
-            context = await self.units["conversational_answer"].run(context)
+            context = await self._run_unit("conversational_answer", context)
             yield context["conversational_response"]
             if "parsed_result" in context:
-                context = await self.units["followup"].run(context)
+                context = await self._run_unit("followup", context)
                 yield context["followup_response"]
             self.last_context = context  # store final context
             return
 
         # Decide reuse of addresses and datasets
-        context = await self.units["decide_reuse_addresses"].run(context)
+        context = await self._run_unit("decide_reuse_addresses", context)
         reuse_addresses_decision = context["reuse_addresses_decision"]
         logger.info(f"Reuse addresses decision: {reuse_addresses_decision}")
 
-        context = await self.units["decide_reuse_datasets"].run(context)
+        context = await self._run_unit("decide_reuse_datasets", context)
         reuse_datasets_decision = context["reuse_datasets_decision"]
         logger.info(f"Reuse datasets decision: {reuse_datasets_decision}")
 
@@ -88,7 +103,7 @@ class ConversationalAgent:
         )
 
         if need_fresh_parse:
-            context = await self.units["parse_query"].run(context)
+            context = await self._run_unit("parse_query", context)
             parsed_result = context["parsed_result"]
             if reuse_addresses_decision == "reuse" and self.last_parsed_result:
                 parsed_result["address"] = list(self.last_parsed_result.get("address") or [])
@@ -109,11 +124,15 @@ class ConversationalAgent:
 
         context["last_parsed_result"] = self.last_parsed_result
 
+        context = await self._run_unit("decide_intersection", context)
+        intersection_decision = context.get("intersection_decision")
+        logger.info(f"Intersection decision: {intersection_decision}")
+
         # Run initial fan-out in parallel: formatting, data preview, BBL resolution
         initial_tasks = [
-            asyncio.create_task(self.units["parsed_result_format"].run(context)),
-            asyncio.create_task(self.units["data_preview"].run(context)),
-            asyncio.create_task(self.units["resolve_bbls"].run(context)),
+            asyncio.create_task(self._run_unit("parsed_result_format", context)),
+            asyncio.create_task(self._run_unit("data_preview", context)),
+            asyncio.create_task(self._run_unit("resolve_bbls", context)),
         ]
         await asyncio.gather(*initial_tasks)
 
@@ -126,30 +145,30 @@ class ConversationalAgent:
             yield context["llm_data_response"]
 
         # Surrounding decision (LLM) after BBL resolution
-        context = await self.units["surrounding_decision"].run(context)
+        context = await self._run_unit("surrounding_decision", context)
         surrounding_decision = context["surrounding_decision"]
         logger.info(f"Surrounding decision: {surrounding_decision}")
 
         aggregate_task = None
         if surrounding_decision in ("include_surrounding", "use_span"):
-            aggregate_task = asyncio.create_task(self.units["aggregate_surrounding"].run(context))
+            aggregate_task = asyncio.create_task(self._run_unit("aggregate_surrounding", context))
         else:
             context["nearby_bbls"] = context.get("resolved_bbls", [])  # use only target
 
         if aggregate_task:
             await aggregate_task
 
-        context = await self.units["build_dataset_filters"].run(context)
+        context = await self._run_unit("build_dataset_filters", context)
 
         # Filter datasets
-        context = await self.units["filter_datasets"].run(context)
+        context = await self._run_unit("filter_datasets", context)
         filtered_datasets = context["filtered_datasets"]
         data_samples = context["data_samples"]
 
         # Decide risk summary and show data in parallel
         decision_tasks = [
-            asyncio.create_task(self.units["decide_risk_summary"].run(context)),
-            asyncio.create_task(self.units["decide_show_data"].run(context)),
+            asyncio.create_task(self._run_unit("decide_risk_summary", context)),
+            asyncio.create_task(self._run_unit("decide_show_data", context)),
         ]
         await asyncio.gather(*decision_tasks)
 
@@ -161,7 +180,7 @@ class ConversationalAgent:
 
         risk_summary_task = None
         if risk_decision == "risk_summary_needed":
-            risk_summary_task = asyncio.create_task(self.units["risk_summary"].run(context))
+            risk_summary_task = asyncio.create_task(self._run_unit("risk_summary", context))
 
         preview_tasks = []
         if show_data_decision == "show_data":
@@ -186,7 +205,7 @@ class ConversationalAgent:
                 yield f"**{ds_name}**\n{description}\n\nPreview:\n{preview}"
 
         # Followup
-        context = await self.units["followup"].run(context)
+        context = await self._run_unit("followup", context)
         yield context["followup_response"]
         self.last_context = context  # store final context for logging
 

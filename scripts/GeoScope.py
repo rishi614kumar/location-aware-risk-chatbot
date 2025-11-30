@@ -6,6 +6,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 from api.GeoClient import get_bbl_from_address, get_bbl_from_intersection
@@ -44,6 +45,7 @@ class GeoResolution:
     bundles: List[GeoBundle]
     bbls: List[str]
     resolved_records: List[Tuple[Dict[str, Any], Optional[str]]] = field(default_factory=list)
+    metrics: Dict[str, Any] = field(default_factory=dict)
 
 
 def _dedupe_preserve_order(values: List[Optional[str]]) -> List[str]:
@@ -166,6 +168,11 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
     ordered_bbls: List[str] = []
     seen_bbls: set[str] = set()
     resolved_records: List[Tuple[Dict[str, Any], Optional[str]]] = []
+    total_start = time.perf_counter()
+    address_lookup_secs = 0.0
+    geo_bundle_secs = 0.0
+    address_calls = 0
+    geo_bundle_calls = 0
 
     for record in addresses or []:
         if not isinstance(record, dict):
@@ -173,7 +180,10 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
             continue
 
         record_copy = dict(record)
+        lookup_start = time.perf_counter()
         bbl = _resolve_single_bbl(record_copy)
+        address_lookup_secs += time.perf_counter() - lookup_start
+        address_calls += 1
         resolved_records.append((record_copy, str(bbl) if bbl else None))
         if not bbl:
             continue
@@ -182,20 +192,39 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
             continue
         seen_bbls.add(bbl_str)
 
+        bundle_start = time.perf_counter()
+        geo_bundle_calls += 1
         try:
             bundle = geo_from_bbl(bbl_str)
             if not isinstance(bundle, GeoBundle):
                 raise TypeError("geo_from_bbl did not return GeoBundle")
             if not bundle.bbl:
                 bundle = bundle.copy(update={"bbl": bbl_str})
-            bundles.append(bundle)
-            ordered_bbls.append(bundle.bbl)
         except Exception as exc:
+            geo_bundle_secs += time.perf_counter() - bundle_start
             logger.warning(f"Geo bundle lookup failed for BBL {bbl_str}: {exc}")
             ordered_bbls.append(bbl_str)
+            continue
+
+        geo_bundle_secs += time.perf_counter() - bundle_start
+        bundles.append(bundle)
+        ordered_bbls.append(bundle.bbl)
 
     ordered_bbls = _dedupe_preserve_order(ordered_bbls)
-    return GeoResolution(bundles=bundles, bbls=ordered_bbls, resolved_records=resolved_records)
+    metrics = {
+        "resolve_geo_bundles_secs": time.perf_counter() - total_start,
+        "address_lookup_secs": address_lookup_secs,
+        "geo_bundle_secs": geo_bundle_secs,
+        "address_calls": address_calls,
+        "geo_bundle_calls": geo_bundle_calls,
+        "input_addresses": len(addresses or []),
+    }
+    return GeoResolution(
+        bundles=bundles,
+        bbls=ordered_bbls,
+        resolved_records=resolved_records,
+        metrics=metrics,
+    )
 
 
 def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: Optional[Dict[str, GeoBundle]] = None) -> List[str]:
