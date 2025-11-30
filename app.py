@@ -190,11 +190,58 @@ async def on_message(msg: cl.Message):
     # Create a single message and stream tokens for typewriter effect
     streamed_msg = cl.Message(content="")
     await streamed_msg.send()
+    def _split_markdown_table_sections(text: str):
+        """Split a chunk into pre-table, table, and post-table sections."""
+        lines = text.splitlines(True)
+        idx = 0
+        start_idx = None
+        end_idx = None
+        in_table = False
+
+        for line in lines:
+            stripped = line.lstrip()
+            is_table_line = stripped.startswith("|") and stripped.count("|") >= 2
+            if not in_table:
+                if is_table_line:
+                    start_idx = idx
+                    in_table = True
+            else:
+                if not is_table_line and stripped.strip():
+                    end_idx = idx
+                    break
+            idx += len(line)
+
+        if not in_table:
+            return text, "", ""
+
+        if end_idx is None:
+            end_idx = len(text)
+
+        pre_text = text[:start_idx]
+        table_text = text[start_idx:end_idx]
+        post_text = text[end_idx:]
+        return pre_text, table_text, post_text
+
+    async def _stream_with_typewriter(text: str):
+        for token in text:
+            await streamed_msg.stream_token(token)
+            await asyncio.sleep(CHATBOT_TYPEWRITER_DELAY)
+
     async for chunk in agent.stream(user_text):
         if CHATBOT_TYPEWRITER_DELAY:
-            for token in chunk:
-                await streamed_msg.stream_token(token)
-                await asyncio.sleep(CHATBOT_TYPEWRITER_DELAY)
+            pre_table, table_block, post_table = _split_markdown_table_sections(chunk)
+
+            if pre_table:
+                await _stream_with_typewriter(pre_table)
+
+            if table_block:
+                await streamed_msg.stream_token(table_block)
+
+            if post_table:
+                await _stream_with_typewriter(post_table)
+
+            if not pre_table and not table_block and not post_table:
+                continue
         else:
             await streamed_msg.stream_token(chunk)
         if not chunk.endswith("\n"):

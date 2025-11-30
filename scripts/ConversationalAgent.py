@@ -22,11 +22,12 @@ from scripts.ConversationalUnit import (
 )
 
 class ConversationalAgent:
-    def __init__(self, chat_backend=None):
+    def __init__(self, chat_backend=None, debug=False):
         self.llm_chat = chat_backend or Chat(make_backend(provider="gemini"))
         self.chat_history = []
         self.last_parsed_result = None
         self.last_context = None  # store final context for logging
+        self.debug = debug
         # Instantiate units
         self.units = {
             "decide_mode": DecideModeUnit(self.llm_chat),
@@ -117,10 +118,12 @@ class ConversationalAgent:
         await asyncio.gather(*initial_tasks)
 
         # Format & yield parsed result
-        yield context["formatted_parsed_result"]
+        if self.debug:
+            yield context["formatted_parsed_result"]
 
         # Data preview intro
-        yield context["llm_data_response"]
+        if self.debug:
+            yield context["llm_data_response"]
 
         # Surrounding decision (LLM) after BBL resolution
         context = await self.units["surrounding_decision"].run(context)
@@ -175,7 +178,7 @@ class ConversationalAgent:
 
         if risk_summary_task:
             await risk_summary_task
-            yield f"**Risk Summary:**\n{context['risk_summary']}"
+            yield f"{context['risk_summary']}"
 
         if preview_tasks:
             previews = await asyncio.gather(*preview_tasks)
@@ -212,3 +215,6 @@ class ConversationalAgent:
         else:
             preview = str(df_head)
         return ds.name, ds.description, preview
+
+    def set_debug(self, enabled: bool) -> None:
+        self.debug = bool(enabled)
