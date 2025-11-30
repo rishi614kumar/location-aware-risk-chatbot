@@ -23,6 +23,7 @@ def _initialize_agent() -> None:
     agent.chat_history = []
     agent.last_parsed_result = None
     agent.last_context = None
+    agent.warm_cache()
 
 
 def _restore_chat_history_from_thread(thread) -> None:

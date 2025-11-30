@@ -55,6 +55,19 @@ class ConversationalAgent:
         timings = context.setdefault("timings", {})
         timings[f"{unit_key}_secs"] = duration
 
+    def warm_cache(self) -> None:
+        """Prime geospatial resources so the first user request is fast."""
+        try:
+            from scripts.GeoBundle import geo_from_bbl
+            from data.pluto import load_pluto_lookup
+
+            # Warm PLUTO lookups and GeoBundle cache using a canonical Midtown BBL.
+            load_pluto_lookup()
+            geo_from_bbl("1000000001")
+            logger.info("Geo resources warmed successfully.")
+        except Exception as exc:
+            logger.warning("Geo warm-up skipped due to error: %s", exc)
+
     async def _run_unit(self, unit_key: str, context):
         start = time.perf_counter()
         try:
