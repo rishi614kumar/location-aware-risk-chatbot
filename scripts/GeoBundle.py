@@ -1,13 +1,17 @@
 from __future__ import annotations
-from typing import Optional, Dict, Any, List
+import threading
+from functools import lru_cache
+from typing import Dict, Any, List
 
 # Reuse your existing modules/utilities
-from api.GeoClient import Geoclient, get_bbl_from_address, get_bins_from_bbl
+from api.GeoClient import Geoclient, get_bbl_from_address
 from adapters.precinct import get_precinct_from_bbl
-from adapters.schemas import GeoBundle, SourceMeta
+from adapters.schemas import GeoBundle
+from config.logger import logger
 
 
 _gc = Geoclient()
+_CACHE_LOCK = threading.RLock()
 
 def _standardize_bundle(base: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -37,6 +41,29 @@ def _standardize_bundle(base: Dict[str, Any]) -> Dict[str, Any]:
     }
     return GeoBundle(**bundle)
 
+
+def _extract_bins(raw: Dict[str, Any]) -> List[str]:
+    bins = set()
+
+    if not isinstance(raw, dict):
+        return []
+
+    def _add(value: Any) -> None:
+        if not value:
+            return
+        value_str = str(value).strip()
+        if value_str.isdigit():
+            bins.add(value_str)
+
+    _add(raw.get("buildingIdentificationNumber"))
+    _add(raw.get("bin"))
+
+    for key, value in raw.items():
+        if key and key.lower().startswith("gibuildingidentificationnumber"):
+            _add(value)
+
+    return sorted(bins)
+
 def geo_from_address(address: str, borough: str) -> Dict[str, Any]:
     """
     Address -> Geoclient for full context (precinct/NTA/coords),
@@ -48,7 +75,8 @@ def geo_from_address(address: str, borough: str) -> Dict[str, Any]:
 
     # Primary ids
     bbl = info.get("bbl")
-    bins: List[str] = get_bins_from_bbl(bbl) if bbl else []
+    raw = info.get("raw", {})
+    bins: List[str] = _extract_bins(raw) if bbl else []
 
     # Prefer precinct/nta/coords directly from Geoclient for address flow
     bundle = {
@@ -66,17 +94,27 @@ def geo_from_address(address: str, borough: str) -> Dict[str, Any]:
     }
     return _standardize_bundle(bundle)
 
-def geo_from_bbl(bbl: str) -> Dict[str, Any]:
+
+@lru_cache(maxsize=4096)
+def _geo_from_bbl_cached(bbl: str) -> GeoBundle:
     """
     BBL -> precinct from PLUTO (fast local),
     Augment with Geoclient fields if available (borough/nta may be present).
     """
-    # PLUTO for precinct
-    precinct = get_precinct_from_bbl(bbl)
-
-    # Geoclient to enrich (NTA, maybe borough; precinct here is from PLUTO by design)
     info = _gc.bbl(bbl)
-    bins: List[str] = get_bins_from_bbl(bbl)  # often works for lots with structures
+    raw = info.get("raw", {})
+    bins = _extract_bins(raw)
+
+    precinct = info.get("policePrecinct")
+    if precinct is None:
+        try:
+            precinct = get_precinct_from_bbl(bbl)
+            precinct_source = "pluto"
+        except Exception as exc:
+            logger.warning(f"Precinct fallback failed for BBL %s: %s", bbl, exc)
+            precinct_source = "unknown"
+    else:
+        precinct_source = "geoclient"
 
     bundle = {
         "input": {"type": "bbl", "bbl": bbl},
@@ -85,11 +123,21 @@ def geo_from_bbl(bbl: str) -> Dict[str, Any]:
         "borough": info.get("borough"),
         "nta": info.get("nta"),
         "cd": info.get("communityDistrict"),
-        "precinct": str(precinct) if precinct is not None else None,  # <- PLUTO source of truth for BBL flow
+        "precinct": str(precinct) if precinct is not None else None,
         "latitude": info.get("latitude"),
         "longitude": info.get("longitude"),
         "grc": info.get("grc"),
-        "sources": {"precinct": "pluto"},
+        "sources": {"precinct": precinct_source},
     }
-    return _standardize_bundle(bundle)
+    return GeoBundle(**bundle)
+
+
+def geo_from_bbl(bbl: str) -> Dict[str, Any]:
+    with _CACHE_LOCK:
+        bundle = _geo_from_bbl_cached(str(bbl))
+    return bundle.copy(deep=True)
+
+
+def geo_from_bbl_cache_info():
+    return _geo_from_bbl_cached.cache_info()
 

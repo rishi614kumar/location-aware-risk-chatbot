@@ -17,7 +17,7 @@ from adapters.precinct import get_precinct_from_bbl
 from adapters.nta import get_nta_from_bbl
 from adapters.street_span import get_lion_span_from_bbl, get_bbls_between_intersections, get_segment_id_from_bbl
 from adapters.schemas import GeoBundle
-from scripts.GeoBundle import geo_from_bbl
+from scripts.GeoBundle import geo_from_bbl, geo_from_bbl_cache_info
 from config.settings import DATASET_CONFIG,BORO_CODE_MAP
 from config.logger import logger
 
@@ -173,6 +173,8 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
     geo_bundle_secs = 0.0
     address_calls = 0
     geo_bundle_calls = 0
+    geo_bundle_hits = 0
+    geo_bundle_misses = 0
 
     for record in addresses or []:
         if not isinstance(record, dict):
@@ -194,6 +196,7 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
 
         bundle_start = time.perf_counter()
         geo_bundle_calls += 1
+        cache_before = geo_from_bbl_cache_info()
         try:
             bundle = geo_from_bbl(bbl_str)
             if not isinstance(bundle, GeoBundle):
@@ -202,11 +205,17 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
                 bundle = bundle.copy(update={"bbl": bbl_str})
         except Exception as exc:
             geo_bundle_secs += time.perf_counter() - bundle_start
+            cache_after = geo_from_bbl_cache_info()
+            geo_bundle_hits += max(0, cache_after.hits - cache_before.hits)
+            geo_bundle_misses += max(0, cache_after.misses - cache_before.misses)
             logger.warning(f"Geo bundle lookup failed for BBL {bbl_str}: {exc}")
             ordered_bbls.append(bbl_str)
             continue
 
         geo_bundle_secs += time.perf_counter() - bundle_start
+        cache_after = geo_from_bbl_cache_info()
+        geo_bundle_hits += max(0, cache_after.hits - cache_before.hits)
+        geo_bundle_misses += max(0, cache_after.misses - cache_before.misses)
         bundles.append(bundle)
         ordered_bbls.append(bundle.bbl)
 
@@ -217,6 +226,8 @@ def resolve_geo_bundles_from_addresses(addresses: List[Dict[str, Any]]) -> GeoRe
         "geo_bundle_secs": geo_bundle_secs,
         "address_calls": address_calls,
         "geo_bundle_calls": geo_bundle_calls,
+        "geo_bundle_cache_hits": geo_bundle_hits,
+        "geo_bundle_cache_misses": geo_bundle_misses,
         "input_addresses": len(addresses or []),
     }
     return GeoResolution(

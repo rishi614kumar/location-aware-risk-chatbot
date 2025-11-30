@@ -168,6 +168,12 @@ class ResolveBBLsUnit(ConversationalUnit):
             details.get("geo_bundle_secs", 0.0),
             details.get("span_resolution_secs", 0.0),
         )
+        logger.info(
+            "Geo resolution cache | hits=%s | misses=%s | calls=%s",
+            details.get("geo_bundle_cache_hits"),
+            details.get("geo_bundle_cache_misses"),
+            details.get("geo_bundle_calls"),
+        )
         return context
 
 class AggregateSurroundingBBLsUnit(ConversationalUnit):
