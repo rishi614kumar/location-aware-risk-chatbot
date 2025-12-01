@@ -33,11 +33,10 @@ def _nta_from_geoclient(bbl: str) -> Optional[str]:
         logger.error(f"Unexpected Geoclient error for BBL {bbl}: {exc}")
         return None
 
-    # 1. Try standard 'nta' (This is usually the 2010 code: e.g. 'MN24')
-    # This is what matches most NYC Open Data 'Population' datasets.
+    # 1. Try standard 'nta' (2010 code: e.g. 'MN24')
     nta = info.get("nta")
     
-    # 2. Fallback: If 'nta' is empty, try 'nta2020' if you need modern codes
+    # 2. Fallback: 
     if not nta:
         nta = info.get("nta2020")
         if nta:
@@ -58,7 +57,7 @@ def _nta_from_spatial(bbl: str) -> Optional[str]:
     pluto = load_pluto_geom()
     lot = pluto.loc[pluto["BBL"] == str(bbl)]
     if lot.empty:
-        return None
+        return None 
 
     # Note: This loads 2020 shapes.
     nta_gdf = load_nta_2020().to_crs(pluto.crs)
@@ -67,8 +66,7 @@ def _nta_from_spatial(bbl: str) -> Optional[str]:
     if joined.empty:
         return None
     
-    # Usually the column is 'NTA2020' or 'NTA_CODE' depending on your specific file
-    # We try both to be safe
+    # Usually the column is 'NTA2020' or 'NTA_CODE' depending on specific file
     val = joined.iloc[0].get("NTA2020") or joined.iloc[0].get("NTA_CODE")
     
     return str(val).strip().upper() if val else None
