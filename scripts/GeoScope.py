@@ -360,8 +360,7 @@ def _build_where_for_geo_unit(
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{p}'" for p in ids)
-        pct_col = col_name.get("precinct", "Precinct")
-        return f"{pct_col} IN ({vals})" if vals else None
+        return f"PCT IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
