@@ -220,7 +220,7 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: 
                 else:
                     val = get_nta_from_bbl(b)
             elif geo_unit == "STREETSPAN":
-                vals = get_segment_id_from_bbl(b)
+                vals = get_segment_id_from_bbl(b,buffer_ft=60)
                 if vals:
                     units.update(vals)
                 continue
