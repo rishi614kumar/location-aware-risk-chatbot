@@ -23,6 +23,7 @@ def _initialize_agent() -> None:
     agent.chat_history = []
     agent.last_parsed_result = None
     agent.last_context = None
+    agent.warm_cache()
 
 
 def _restore_chat_history_from_thread(thread) -> None:
@@ -257,6 +258,7 @@ async def on_message(msg: cl.Message):
         "mode": ctx.get("mode"),
         "reuse_addresses_decision": ctx.get("reuse_addresses_decision"),
         "reuse_datasets_decision": ctx.get("reuse_datasets_decision"),
+        "intersection_decision": ctx.get("intersection_decision"),
         "surrounding_decision": ctx.get("surrounding_decision"),
         "risk_decision": ctx.get("risk_decision"),
         "show_data_decision": ctx.get("show_data_decision"),
@@ -264,12 +266,14 @@ async def on_message(msg: cl.Message):
     dataset_filters = ctx.get("dataset_filters", {})
     filtered_datasets = ctx.get("filtered_datasets", [])
     data_samples = ctx.get("data_samples", {})
+    timings = ctx.get("timings", {})
 
     lengths = {name: (getattr(df, 'shape', (len(df) if hasattr(df, '__len__') else None, None))[0] if df is not None else 0) for name, df in data_samples.items()}
 
     logger.info(
-        "QUERY DIAGNOSTICS | decisions=%s | parsed_categories=%s | parsed_datasets=%s | addresses=%s | confidence=%s | filters=%s | dataset_lengths=%s | elapsed=%.3fs",
+        "QUERY DIAGNOSTICS | decisions=%s | timings=%s | parsed_categories=%s | parsed_datasets=%s | addresses=%s | confidence=%s | filters=%s | dataset_lengths=%s | elapsed=%.3fs",
         decisions,
+        timings,
         parsed.get('categories'),
         parsed.get('dataset_names'),
         parsed.get('address'),

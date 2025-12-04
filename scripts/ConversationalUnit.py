@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any, Dict, Set
 from config.logger import logger
 
@@ -92,6 +93,25 @@ class ParseQueryUnit(ConversationalUnit):
         context["parsed_result"] = result
         return context
 
+
+class DecideIntersectionAnalysisUnit(ConversationalUnit):
+    def __init__(self, llm_chat):
+        super().__init__("decide_intersection")
+        self.llm_chat = llm_chat
+
+    async def run(self, context):
+        from prompts.app_prompts import get_intersection_analysis_decision_prompt
+
+        user_text = context["user_text"]
+        chat_history = context["chat_history"]
+        parsed_result = context.get("parsed_result") or {}
+        prompt = get_intersection_analysis_decision_prompt(user_text, chat_history, parsed_result)
+        raw_decision = await asyncio.to_thread(self.llm_chat.ask, prompt)
+        decision = _normalize_choice(raw_decision, {"intersection", "direct"}, "direct")
+        context["intersection_decision"] = decision
+        return context
+
+
 class DataPreviewUnit(ConversationalUnit):
     def __init__(self, llm_chat):
         super().__init__("data_preview")
@@ -113,17 +133,47 @@ class ResolveBBLsUnit(ConversationalUnit):
     async def run(self, context):
         from scripts.GeoScope import resolve_geo_bundles_from_addresses, resolve_bbls_from_street_spans
         addresses = context.get("parsed_result", {}).get('address', [])
+        resolution_start = time.perf_counter()
         resolution = await asyncio.to_thread(resolve_geo_bundles_from_addresses, addresses)
+        resolution_elapsed = time.perf_counter() - resolution_start
         resolved_bbls = resolution.bbls
-        span_bbls = resolve_bbls_from_street_spans(resolution)
+        intersection_decision = context.get("intersection_decision", "direct")
+        span_bbls = []
+        span_elapsed = 0.0
+        if intersection_decision == "intersection":
+            span_start = time.perf_counter()
+            span_bbls = resolve_bbls_from_street_spans(resolution)
+            span_elapsed = time.perf_counter() - span_start
+            if span_bbls:
+                logger.info(f"Street span BBLs: {len(span_bbls)}")
+            else:
+                logger.info("Intersection analysis requested but no span BBLs were resolved.")
+        else:
+            logger.debug("Skipping street span resolution (direct mode).")
         bundle_lookup = {bundle.bbl: bundle for bundle in resolution.bundles if bundle and bundle.bbl}
         context["resolved_bbls"] = resolved_bbls
         context["span_bbls"] = span_bbls
         context["geo_bundles"] = resolution.bundles
         context["bundle_lookup"] = bundle_lookup
         logger.info(f"Resolved BBLs: {resolved_bbls}")
-        if span_bbls:
-            logger.info(f"Street span BBLs: {len(span_bbls)}")
+        timings = context.setdefault("timings", {})
+        details = dict(resolution.metrics or {})
+        details["span_resolution_secs"] = span_elapsed
+        details.setdefault("resolve_geo_bundles_secs", resolution_elapsed)
+        timings["resolve_bbls"] = details
+        logger.info(
+            "Geo resolution timings | total=%.3fs | address_lookup=%.3fs | geo_bundle=%.3fs | span=%.3fs",
+            details.get("resolve_geo_bundles_secs", 0.0),
+            details.get("address_lookup_secs", 0.0),
+            details.get("geo_bundle_secs", 0.0),
+            details.get("span_resolution_secs", 0.0),
+        )
+        logger.info(
+            "Geo resolution cache | hits=%s | misses=%s | calls=%s",
+            details.get("geo_bundle_cache_hits"),
+            details.get("geo_bundle_cache_misses"),
+            details.get("geo_bundle_calls"),
+        )
         return context
 
 class AggregateSurroundingBBLsUnit(ConversationalUnit):

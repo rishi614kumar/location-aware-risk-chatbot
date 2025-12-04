@@ -10,7 +10,7 @@ def get_first_message() -> str:
     Edit the template below to change the initial message.
     """
     return (
-        '''Hi there! I can help you analyze environmental and compliance risks for any NYC address, street span, or neighborhood.'''
+        '''Hi there! I can help you analyze environmental and compliance risks for any NYC address, street segment, or project ID.'''
     )
 
 def get_system_prompt() -> str:
@@ -133,6 +133,34 @@ def get_reuse_dataset_decision_prompt(user_text, chat_history, last_datasets):
         " Default to 'reuse' when the user is following up on the same analysis without asking for additional or different datasets."
         " Choose 'reparse' only if the user clearly requests different datasets, categories, or data views. Respond with either 'reuse' or 'reparse'.)"
     )
+
+
+def get_intersection_analysis_decision_prompt(user_text, chat_history, parsed_result):
+    """Prompt for deciding whether to perform intersection (street span) analysis."""
+    addresses = parsed_result.get('address') or []
+    address_summaries = []
+    for address in addresses:
+        raw = (address.get('raw') or '').strip()
+        notes = (address.get('notes') or '').strip()
+        pieces = [raw] if raw else []
+        if notes:
+            pieces.append(f"notes={notes}")
+        if not pieces:
+            street = (address.get('street_name') or '').strip()
+            borough = (address.get('borough') or '').strip()
+            house = (address.get('house_number') or '').strip()
+            fallback = " ".join(part for part in [house, street, borough] if part)
+            if fallback:
+                pieces.append(fallback)
+        address_summaries.append(" / ".join(pieces) if pieces else "<empty>")
+    addresses_text = "; ".join(address_summaries) if address_summaries else "None"
+    return (
+        "$(META-PROMPT: Review the user's latest request, the chat history, and the parsed address details to decide whether the user is describing a street segment bounded by two intersections. "
+        f"User message: '{user_text}'. Chat history: '{chat_history}'. Parsed addresses: '{addresses_text}'. "
+        "Choose 'intersection' only when the user clearly references a street span between two intersections or provides cross-street bounds that require corridor analysis. "
+        "Otherwise respond with 'direct' so that only the specific address or location is analyzed. Respond with either 'intersection' or 'direct'.)"
+    )
+
 
 def get_surrounding_decision_prompt(user_text, chat_history, parsed_result, span_bbls=None):
     """Prompt for deciding whether to include surrounding BBLs (spatial expansion), only the target, or a street-span corridor."""
