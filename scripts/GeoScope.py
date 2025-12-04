@@ -260,7 +260,7 @@ def get_surrounding_units(bbl_list: List[str], geo_unit: str, *, bundle_lookup: 
                 else:
                     val = get_nta_from_bbl(b)
             elif geo_unit == "STREETSPAN":
-                vals = get_segment_id_from_bbl(b)
+                vals = get_segment_id_from_bbl(b,buffer_ft=60)
                 if vals:
                     units.update(vals)
                 continue
@@ -400,8 +400,7 @@ def _build_where_for_geo_unit(
     if geo_unit == "PRECINCT":
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)
         vals = ",".join(f"'{p}'" for p in ids)
-        pct_col = col_name.get("precinct", "Precinct")
-        return f"{pct_col} IN ({vals})" if vals else None
+        return f"PCT IN ({vals})" if vals else None
 
     if geo_unit.startswith("NTA"):
         ids = get_surrounding_units(bbls_to_use, geo_unit, bundle_lookup=bundle_lookup)

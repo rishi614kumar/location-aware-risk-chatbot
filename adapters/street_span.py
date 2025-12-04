@@ -310,7 +310,7 @@ def get_segment_id_from_bbl(
     Optionally allows a custom buffer distance (in feet).
     If buffer_ft is None, uses StreetWidth_Max + DEFAULT_BUFFER_INCREMENT_FT ft as default.
     """
-    lion = load_lion14_geom()
+    lion14 = load_lion14_geom()
     pluto = load_pluto_geom()
 
     # Ensure BBL is compared as string
@@ -320,11 +320,11 @@ def get_segment_id_from_bbl(
         return None
 
     # Ensure CRS matches between lion and pluto
-    if lion.crs.to_epsg() != pluto.crs.to_epsg():
-        lion = lion.to_crs(pluto.crs)
+    if lion14.crs.to_epsg() != pluto.crs.to_epsg():
+        lion14 = lion14.to_crs(pluto.crs)
 
     # Build street buffers
-    lion_buf = lion.copy()
+    lion_buf = lion14.copy()
     if buffer_ft is None:
         # Default buffer logic
         lion_buf["buf_ft"] = np.where(
