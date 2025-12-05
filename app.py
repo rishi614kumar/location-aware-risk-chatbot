@@ -34,9 +34,13 @@ def _restore_chat_history_from_thread(thread) -> None:
         if step.get("type") == "user_message":
             text = step.get("output") or step.get("input")
             if text:
-                history.append(text)
+                history.append({"role": "user", "content": text})
+        elif step.get("type") == "assistant_message":
+            text = step.get("output") or step.get("input")
+            if text:
+                history.append({"role": "assistant", "content": text})
     agent.chat_history = history
-    logger.info("Restored %d prior user turns into agent history.", len(history))
+    logger.info("Restored %d prior messages into agent history.", len(history))
 
 
 def _ensure_sqlite_schema(data_layer: SQLAlchemyDataLayer) -> None:

@@ -77,11 +77,11 @@ class ConversationalAgent:
 
     async def stream(self, user_text):
         """Async generator yielding content chunks as soon as they are ready."""
-        self.chat_history.append(user_text)
-        history_str = "\n".join(self.chat_history)
+        self.chat_history.append({"role": "user", "content": user_text})
+        #history_str = "\n".join(self.chat_history)
         context = {
             "user_text": user_text,
-            "chat_history": history_str,
+            "chat_history": self.chat_history,
             "llm_chat": self.llm_chat,
             "last_parsed_result": self.last_parsed_result,
             "timings": {},
@@ -93,10 +93,14 @@ class ConversationalAgent:
 
         if mode == "conversational":
             context = await self._run_unit("conversational_answer", context)
-            yield context["conversational_response"]
+            conv_response = context["conversational_response"]
+            context["chat_history"].append({"role": "assistant", "content": conv_response})
+            yield conv_response
             if "parsed_result" in context:
                 context = await self._run_unit("followup", context)
-                yield context["followup_response"]
+                followup_response = context["followup_response"]
+                context["chat_history"].append({"role": "assistant", "content": followup_response})
+                yield followup_response
             self.last_context = context  # store final context
             return
 
@@ -150,12 +154,14 @@ class ConversationalAgent:
         await asyncio.gather(*initial_tasks)
 
         # Format & yield parsed result
-        if self.debug:
-            yield context["formatted_parsed_result"]
+        formatted_parsed_result = context["formatted_parsed_result"]
+        context["chat_history"].append({"role": "assistant", "content": formatted_parsed_result})
+        yield formatted_parsed_result
 
         # Data preview intro
-        if self.debug:
-            yield context["llm_data_response"]
+        llm_data_response = context["llm_data_response"]
+        context["chat_history"].append({"role": "assistant", "content": llm_data_response})
+        yield llm_data_response
 
         # Surrounding decision (LLM) after BBL resolution
         context = await self._run_unit("surrounding_decision", context)
@@ -178,22 +184,11 @@ class ConversationalAgent:
         filtered_datasets = context["filtered_datasets"]
         data_samples = context["data_samples"]
 
-        # Decide risk summary and show data in parallel
-        decision_tasks = [
-            asyncio.create_task(self._run_unit("decide_risk_summary", context)),
-            asyncio.create_task(self._run_unit("decide_show_data", context)),
-        ]
-        await asyncio.gather(*decision_tasks)
-
-        risk_decision = context.get("risk_decision")
-        logger.info(f"Risk summary decision: {risk_decision}")
+        # Decide show-data and risk summary decisions (sequential, not parallel)
+        context = await self.units["decide_show_data"].run(context)
 
         show_data_decision = context.get("show_data_decision")
         logger.info(f"Show data decision: {show_data_decision}")
-
-        risk_summary_task = None
-        if risk_decision == "risk_summary_needed":
-            risk_summary_task = asyncio.create_task(self._run_unit("risk_summary", context))
 
         preview_tasks = []
         if show_data_decision == "show_data":
@@ -208,19 +203,46 @@ class ConversationalAgent:
                 for ds in filtered_datasets
             ]
 
-        if risk_summary_task:
-            await risk_summary_task
-            yield f"{context['risk_summary']}"
-
         if preview_tasks:
             previews = await asyncio.gather(*preview_tasks)
             for ds_name, description, preview in previews:
-                yield f"**{ds_name}**\n{description}\n\nPreview:\n{preview}"
+                dataset_preview_message = f"**{ds_name}**\n{description}\n\nPreview:\n{preview}"
+                context["chat_history"].append({"role": "assistant", "content": dataset_preview_message})
+                yield dataset_preview_message
 
+
+        context = await self.units["decide_risk_summary"].run(context)
+        risk_decision = context.get("risk_decision")
+        logger.info(f"Risk summary decision: {risk_decision}")
+
+        risk_summary_task = None
+        if risk_decision == "data_summary_needed":
+            risk_summary_task = asyncio.create_task(self.units["risk_summary"].run(context))
+
+        
+
+        if risk_summary_task:
+            await risk_summary_task
+            risk_summary_message = f"**Risk Summary:**\n{context['risk_summary']}"
+            context["chat_history"].append({"role": "assistant", "content": risk_summary_message})
+            yield risk_summary_message
+        
         # Followup
         context = await self._run_unit("followup", context)
-        yield context["followup_response"]
+        followup_response = context["followup_response"]
+        context["chat_history"].append({"role": "assistant", "content": followup_response})
+        yield followup_response
         self.last_context = context  # store final context for logging
+        
+        # Log history comparison for debugging
+        #string_history = self.chat_history
+        #gemini_internal_history = self.llm_chat.history()
+        #logger.info(
+        #    f"HISTORY COMPARISON | String chat_history (user messages only): {len(string_history)} messages: {string_history} | "
+        #    f"Gemini internal history (all LLM calls): {len(gemini_internal_history)} entries"
+        #)
+        #if gemini_internal_history:
+        #    logger.debug(f"Gemini internal history details: {gemini_internal_history}")
 
     async def run(self, user_text):
         """Backward compatible: collect all streamed chunks into final response + followup."""
