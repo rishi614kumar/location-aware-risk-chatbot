@@ -75,7 +75,7 @@
 
     // Title
     const title = document.createElement("h1");
-    title.textContent = "NYC Location Aware Risk Chatbot";
+    title.textContent = "GeoRisk AI Chatbot";
     title.style.fontFamily = "var(--font-serif)";
     title.style.fontSize = "clamp(1.9rem, 5.2vw, 3.1rem)";
     title.style.margin = "0";
@@ -94,7 +94,7 @@
 
     // Feature list
     const features = [
-      "Location-aware risk analysis from any NYC address",
+      "Agentic, location-aware risk analysis from any NYC address",
       "Natural-language querying powered by GenAI",
       "Automatically unifies scattered geospatial datasets",
       "Clear, actionable risk summaries in seconds",

@@ -1,5 +1,5 @@
-# location-aware-risk-chatbot
-GenAI-powered chatbot for site-based project risk insights in NYC.
+# GeoRisk AI
+An Agentic Geospatial AI Chatbot for Autonomous Multi-Domain Urban Risk Analysis.
 
 ## Setup Instructions
 

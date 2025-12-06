@@ -66,10 +66,10 @@ DATASET_DESCRIPTIONS = {
         "Includes zoning districts, special purpose districts, subdistricts, limited height districts, "
         "commercial overlays, and zoning map amendments for citywide land use analysis."
     ),
-   # "Population by Community Districts": (
-   #     "Aggregated population counts by community district for decennial census years "
-    #    "1970 through 2010, used for demographic and spatial trend analysis."
-   # ),
+    "Population by Community Districts": (
+        "Aggregated population counts by community district for decennial census years "
+        "1970 through 2010, used for demographic and spatial trend analysis."
+    ),
     "Population by Neighborhood Tabulation Area": (
         "Aggregations of census tracts grouped into Neighborhood Tabulation Areas (NTAs), "
         "providing demographic information and population change from 2000 to 2010."
@@ -155,7 +155,7 @@ DATASET_API_IDS = {
     "Digital City Map Shapefile" : "y23c-72fa",
     "Historic Districts map" : "skyk-mpzq",
     "Zoning GIS data" : None,
-    # "Population by Community Districts" : "xi7c-iiu2",
+    "Population by Community Districts" : "xi7c-iiu2",
     "Population by Neighborhood Tabulation Area" : "swpk-hqdp",
     "Crime" : None,
     "Street Construction Permits" : "tqtj-sjs8",
@@ -368,7 +368,7 @@ cat_to_ds = {
     "Public Safety & Social Context": [
         "NYC OpenData Motor Vehicle Collisions",
         "NYC OpenData Automated Traffic Volume Counts",
-        # "Population by Community Districts",
+        "Population by Community Districts",
         "Population by Neighborhood Tabulation Area",
         "Crime",
         "Citywide Hydrants",

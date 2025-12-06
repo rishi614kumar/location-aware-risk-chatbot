@@ -156,12 +156,14 @@ class ConversationalAgent:
         # Format & yield parsed result
         formatted_parsed_result = context["formatted_parsed_result"]
         context["chat_history"].append({"role": "assistant", "content": formatted_parsed_result})
-        yield formatted_parsed_result
+        if self.debug:
+            yield formatted_parsed_result
 
         # Data preview intro
         llm_data_response = context["llm_data_response"]
         context["chat_history"].append({"role": "assistant", "content": llm_data_response})
-        yield llm_data_response
+        if self.debug:
+            yield llm_data_response
 
         # Surrounding decision (LLM) after BBL resolution
         context = await self._run_unit("surrounding_decision", context)
