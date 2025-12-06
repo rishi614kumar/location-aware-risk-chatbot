@@ -225,7 +225,10 @@ class ConversationalAgent:
 
         if risk_summary_task:
             await risk_summary_task
-            risk_summary_message = f"**Risk Summary:**\n{context['risk_summary']}"
+            if self.debug:
+                risk_summary_message = f"**Risk Summary:**\n{context['risk_summary']}"
+            else:
+                risk_summary_message = f"{context['risk_summary']}"
             context["chat_history"].append({"role": "assistant", "content": risk_summary_message})
             yield risk_summary_message
         
