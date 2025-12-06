@@ -43,11 +43,11 @@ An Agentic Geospatial AI Chatbot for Autonomous Multi-Domain Urban Risk Analysis
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/rishi614kumar/location-aware-risk-chatbot.git
+   git clone https://github.com/rishi614kumar/georisk-ai.git
    ```
 2. Navigate to the project directory:
    ```bash
-   cd location-aware-risk-chatbot
+   cd georisk-ai
    ```
 3. Install the required dependencies:
    ```bash
