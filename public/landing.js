@@ -164,7 +164,7 @@
     links.appendChild(
       makeLink(
         "Repository",
-        "https://github.com/rishi614kumar/location-aware-risk-chatbot",
+        "https://github.com/rishi614kumar/georisk-ai",
       ),
     );
     links.appendChild(

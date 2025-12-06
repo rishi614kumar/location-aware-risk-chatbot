@@ -1,5 +1,5 @@
 # GeoRisk AI
-An Agentic Geospatial AI Chatbot for Autonomous Multi-Domain Urban Risk Analysis.
+An Agentic Geospatial AI Chatbot for Autonomous Multi-Domain Urban Risk Analysis in NYC.
 
 ## Setup Instructions
 
