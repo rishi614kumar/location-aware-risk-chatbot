@@ -208,7 +208,10 @@ class ConversationalAgent:
         if preview_tasks:
             previews = await asyncio.gather(*preview_tasks)
             for ds_name, description, preview in previews:
-                dataset_preview_message = f"**{ds_name}**\n{description}\n\nPreview:\n{preview}"
+                if self.debug:
+                    dataset_preview_message = f"**{ds_name}**\n{description}\n\nPreview:\n{preview}"
+                else:
+                    dataset_preview_message = f"**{ds_name}**\n{description}\n\n{preview}"
                 context["chat_history"].append({"role": "assistant", "content": dataset_preview_message})
                 yield dataset_preview_message
 

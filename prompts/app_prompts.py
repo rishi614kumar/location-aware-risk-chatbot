@@ -11,7 +11,7 @@ def get_first_message() -> str:
     Edit the template below to change the initial message.
     """
     return (
-        '''Hi there! I can help you analyze environmental and compliance risks for any NYC address or street segment'''
+        '''Hi there! I can help you analyze environmental and compliance risks for any NYC address or street segment.'''
     )
 
 def get_system_prompt() -> str:
